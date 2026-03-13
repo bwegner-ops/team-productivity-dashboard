@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from importlib import import_module
 dash = import_module("case-completion-dashboard")
 
-SITE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site")
+SITE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs")
 
 
 def fetch_all_data():
