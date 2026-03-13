@@ -1,0 +1,3819 @@
+#!/usr/bin/env python3
+"""
+Live Dashboard: Daily Case Completion
+Fetches data from Salesforce report 00O4W0000080BLqUAM ("Today's Resolved Cases")
+and serves an auto-refreshing HTML dashboard on localhost.
+"""
+
+import json
+import os
+import subprocess
+import http.server
+import urllib.request
+import ssl
+import threading
+import time
+import tempfile
+import webbrowser
+from datetime import datetime, timedelta
+from collections import defaultdict
+import calendar
+
+REPORT_ID = "00O4W0000080BLqUAM"
+QUEUE_REPORT_ID = "00O4W000007sJOtUAM"
+PEAK_REPORT_ID = "00O4W000008JQiEUAW"
+ORG_ALIAS = "dev-sandbox"
+PORT = 8787
+REFRESH_INTERVAL_SEC = 1800  # auto-refresh every 30 minutes
+
+TEAM_MEMBERS = [
+    "Angela Bautista", "Nikko Illastron",
+    "Dominic Pardilla", "Branden Wegner", "Ayana Fabillaran Mendoza",
+    "Nicholas Padilla", "JaNai Djerbi",
+    "Evelyn Ruiz", "Julia Ye", "Ajaia Gates"
+]
+
+# DRI Work — Google Sheets config
+GDRIVE_DIR = "/Users/brandenwegner/.claude/skills/gdrive"
+DRI_SHEET_ID = "1W66cEJ5SSzPzTrFu__GyQkx5C-2vy2zfkVVhGlW-ams"
+DRI_SHEET_TAB = "#sfs-collections 2024 (started 5/3/24)"
+DRI_CACHE_SEC = 1800  # refresh DRI data every 30 min
+DRI_START_DATE = datetime(2026, 1, 1)
+
+DRI_HANDLE_MAP = {
+    "@eruiz": "Evelyn Ruiz",
+    "@angelabautista": "Angela Bautista",
+    "@nikkoillastron": "Nikko Illastron",
+    "@dpardilla": "Dominic Pardilla",
+    "@bwegner": "Branden Wegner",
+    "@ayana": "Ayana Fabillaran Mendoza",
+    "@npadilla": "Nicholas Padilla",
+    "@jdjerbi": "JaNai Djerbi",
+    "@janaichatman": "JaNai Djerbi",
+    "@juliay": "Julia Ye",
+}
+
+# Evasion Cases — Google Sheets config
+EVASION_SHEET_TAB = "#cap-evasion shift schedule (jan 2026)"
+EVASION_CACHE_SEC = 1800  # refresh every 30 min
+EVASION_START_DATE = datetime(2026, 1, 1)
+
+EVASION_HANDLE_MAP = {
+    **DRI_HANDLE_MAP,
+    "@marivelle": "Marivelle",
+    "@zachariah": "Zachariah Barden",
+}
+
+# Bankruptcy Cases — Google Sheets config
+BK_SHEET_ID = "1Ud1XJl2SzHcgSmr9lhFnWdi7UM5-u0XsNo5e0Dy3C3M"
+BK_SHEET_TAB = "DRI Case Reception(2026)"
+BK_CACHE_SEC = 1800  # refresh every 30 min
+BK_START_DATE = datetime(2026, 1, 2)
+BK_TEAM = ["Angela Bautista", "Dominic Pardilla", "Evelyn Ruiz", "Nikko Illastron"]
+
+# Salesforce name aliases — maps alternate SF names to canonical TEAM_MEMBERS names
+SF_NAME_ALIASES = {
+    "JaNai Chatman": "JaNai Djerbi",
+    "Janai Djerbi": "JaNai Djerbi",
+}
+
+# Evasion action categories
+EVASION_ACTIONED = {"SBI", "Linked for evasion"}  # actions that count as "completed"
+
+# ML Evasion — Snowflake data source
+# Data file: ml_evasion_daily.json (from APP_CAPITAL.APP_CAPITAL.OPERATIONS_CASES_REPORTING)
+# Refresh: snow sql -c small --role APP_CAPITAL__SNOWFLAKE__READ_ONLY --format JSON \
+#   -q "SELECT DATE(CLOSED_AT) as closed_date, QUEUE_LABEL, EMPLOYEE_NAME, COUNT(*) as case_count
+#       FROM APP_CAPITAL.APP_CAPITAL.OPERATIONS_CASES_REPORTING
+#       WHERE QUEUE_LABEL ILIKE '%evasion%' AND CLOSED_AT >= '2026-01-01'
+#         AND CASE_STATUS = 'closed' GROUP BY 1, 2, 3 ORDER BY 1, 2, 3" > ml_evasion_daily.json
+ML_EVASION_DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml_evasion_daily.json")
+ML_EVASION_QUEUE_LABELS = {
+    "flex_loan_evasion_p1": "P1",
+    "flex_loan_evasion_p2": "P2",
+    "flex_loan_evasion_p3": "P3",
+    "evasion_nmi": "NMI",
+    "mca_global_evasion_p1": "MCA P1",
+    "mca_global_evasion_p2": "MCA P2",
+}
+
+
+def load_ml_evasion_raw():
+    """Load ML evasion daily data from JSON file."""
+    try:
+        with open(ML_EVASION_DATA_FILE) as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading ML evasion data: {e}")
+        return []
+
+
+def build_ml_evasion_data():
+    """Build ML evasion data structures with per-person attribution."""
+    raw = load_ml_evasion_raw()
+    if not raw:
+        return {"daily": [], "weekly": [], "monthlyByQueue": [], "queues": [],
+                "people": [], "total2026": 0, "currentMonthTotal": 0}
+
+    date_queue = defaultdict(lambda: defaultdict(int))
+    date_total = defaultdict(int)
+    queues_seen = set()
+    person_date = defaultdict(lambda: defaultdict(int))
+    person_total = defaultdict(int)
+
+    for row in raw:
+        d = row["CLOSED_DATE"]
+        q = ML_EVASION_QUEUE_LABELS.get(row["QUEUE_LABEL"], row["QUEUE_LABEL"])
+        name = row.get("EMPLOYEE_NAME") or "Unassigned"
+        c = row["CASE_COUNT"]
+        date_queue[d][q] += c
+        date_total[d] += c
+        queues_seen.add(q)
+        person_date[name][d] += c
+        person_total[name] += c
+
+    queues = sorted(queues_seen)
+    today = datetime.now()
+
+    # Daily series
+    all_dates = []
+    d = EVASION_START_DATE
+    while d.date() <= today.date():
+        dk = d.strftime("%Y-%m-%d")
+        entry = {"date": d.strftime("%b %d"), "count": date_total.get(dk, 0),
+                 "dow": d.strftime("%a"), "key": dk}
+        for q in queues:
+            entry[q] = date_queue[dk].get(q, 0)
+        all_dates.append(entry)
+        d += timedelta(days=1)
+
+    # Weekly series
+    all_weeks = []
+    week_totals = defaultdict(int)
+    week_queue_totals = defaultdict(lambda: defaultdict(int))
+    for dd in all_dates:
+        dt = datetime.strptime(dd["key"], "%Y-%m-%d")
+        wk = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+        week_totals[wk] += dd["count"]
+        for q in queues:
+            week_queue_totals[wk][q] += dd.get(q, 0)
+
+    week_keys_ordered = []
+    w = EVASION_START_DATE - timedelta(days=EVASION_START_DATE.weekday())
+    while w.date() <= today.date():
+        wk = w.strftime("%Y-%m-%d")
+        entry = {"week": w.strftime("%b %d"), "count": week_totals.get(wk, 0), "key": wk}
+        for q in queues:
+            entry[q] = week_queue_totals[wk].get(q, 0)
+        all_weeks.append(entry)
+        week_keys_ordered.append(wk)
+        w += timedelta(days=7)
+
+    # Monthly by queue
+    month_queue = defaultdict(lambda: defaultdict(int))
+    month_total = defaultdict(int)
+    for dd in all_dates:
+        mk = dd["key"][:7]
+        month_total[mk] += dd["count"]
+        for q in queues:
+            month_queue[mk][q] += dd.get(q, 0)
+    monthly_by_queue = []
+    for m in sorted(month_total.keys()):
+        entry = {"month": datetime.strptime(m, "%Y-%m").strftime("%b '%y"), "key": m, "total": month_total[m]}
+        for q in queues:
+            entry[q] = month_queue[m].get(q, 0)
+        monthly_by_queue.append(entry)
+
+    # Per-person data
+    people_list = []
+    for name, total in sorted(person_total.items(), key=lambda x: -x[1]):
+        pd_weekly = defaultdict(int)
+        for dk, cnt in person_date[name].items():
+            dt2 = datetime.strptime(dk, "%Y-%m-%d")
+            wk2 = (dt2 - timedelta(days=dt2.weekday())).strftime("%Y-%m-%d")
+            pd_weekly[wk2] += cnt
+        people_list.append({
+            "name": name, "total": total,
+            "daily": [person_date[name].get(dd["key"], 0) for dd in all_dates],
+            "weekly": [pd_weekly.get(wk, 0) for wk in week_keys_ordered],
+        })
+
+    total_2026 = sum(date_total.values())
+    current_month_key = today.strftime("%Y-%m")
+    current_month_total = sum(dd["count"] for dd in all_dates if dd["key"].startswith(current_month_key))
+
+    return {
+        "daily": all_dates, "weekly": all_weeks,
+        "monthlyByQueue": monthly_by_queue, "queues": queues,
+        "people": people_list,
+        "total2026": total_2026, "currentMonthTotal": current_month_total,
+    }
+
+
+def fetch_dri_data():
+    """Fetch DRI work data from Google Sheets."""
+    try:
+        result = subprocess.run(
+            ["uv", "run", "gdrive-cli.py", "sheets", "read", DRI_SHEET_ID,
+             "--sheet", DRI_SHEET_TAB],
+            capture_output=True, text=True, cwd=GDRIVE_DIR, timeout=120
+        )
+        if result.returncode != 0:
+            print(f"Error fetching DRI sheet: {result.stderr[:200]}")
+            return []
+        data = json.loads(result.stdout)
+        return data.get("values", [])
+    except Exception as e:
+        print(f"DRI fetch error: {e}")
+        return []
+
+
+def parse_dri_data(rows):
+    """Parse DRI sheet into daily + weekly aggregates from 2026-01-01 onward."""
+    if not rows or len(rows) < 2:
+        return None
+
+    daily_resolved = defaultdict(int)
+    daily_submitted = defaultdict(int)
+    weekly_resolved = defaultdict(int)
+    weekly_submitted = defaultdict(int)
+    person_daily = defaultdict(lambda: defaultdict(int))
+    person_weekly = defaultdict(lambda: defaultdict(int))
+    person_total = defaultdict(int)
+
+    for row in rows[1:]:
+        if len(row) < 2:
+            continue
+        date_str = row[1].strip() if len(row) > 1 else ""
+        resolved_by = (row[7].strip().lower() if len(row) > 7 else "")
+
+        try:
+            parts = date_str.split(", ")
+            date_part = parts[0] + ", " + parts[1]
+            dt = None
+            for fmt in ("%B %d, %Y", "%b %d, %Y"):
+                try:
+                    dt = datetime.strptime(date_part, fmt)
+                    break
+                except ValueError:
+                    pass
+            if dt is None or dt < DRI_START_DATE:
+                continue
+        except (IndexError, TypeError):
+            continue
+
+        date_key = dt.strftime("%Y-%m-%d")
+        week_start = dt - timedelta(days=dt.weekday())
+        week_key = week_start.strftime("%Y-%m-%d")
+
+        daily_submitted[date_key] += 1
+        weekly_submitted[week_key] += 1
+
+        if resolved_by:
+            daily_resolved[date_key] += 1
+            weekly_resolved[week_key] += 1
+            name = DRI_HANDLE_MAP.get(resolved_by)
+            if name:
+                person_daily[name][date_key] += 1
+                person_weekly[name][week_key] += 1
+                person_total[name] += 1
+
+    # Build ordered date list from Jan 1 2026 to today
+    today = datetime.now()
+    all_dates = []
+    d = DRI_START_DATE
+    while d.date() <= today.date():
+        dk = d.strftime("%Y-%m-%d")
+        all_dates.append({
+            "date": d.strftime("%b %d"),
+            "count": daily_resolved.get(dk, 0),
+            "submitted": daily_submitted.get(dk, 0),
+            "dow": d.strftime("%a"),
+            "key": dk,
+        })
+        d += timedelta(days=1)
+
+    # Build ordered week list
+    all_weeks = []
+    week_keys_ordered = []
+    w = DRI_START_DATE - timedelta(days=DRI_START_DATE.weekday())
+    while w.date() <= today.date():
+        wk = w.strftime("%Y-%m-%d")
+        week_end = min(w + timedelta(days=6), today)
+        label = f"{w.strftime('%b %d')}"
+        all_weeks.append({
+            "week": label,
+            "count": weekly_resolved.get(wk, 0),
+            "submitted": weekly_submitted.get(wk, 0),
+            "key": wk,
+        })
+        week_keys_ordered.append(wk)
+        w += timedelta(days=7)
+
+    # Per-person data
+    people_list = []
+    for name, total in sorted(person_total.items(), key=lambda x: -x[1]):
+        people_list.append({
+            "name": name, "total": total,
+            "daily": [person_daily[name].get(dd["key"], 0) for dd in all_dates],
+            "weekly": [person_weekly[name].get(wk, 0) for wk in week_keys_ordered],
+        })
+
+    active = {p["name"] for p in people_list}
+    for member in TEAM_MEMBERS:
+        if member not in active:
+            people_list.append({
+                "name": member, "total": 0,
+                "daily": [0] * len(all_dates),
+                "weekly": [0] * len(all_weeks),
+            })
+
+    total_resolved = sum(p["total"] for p in people_list)
+
+    return {
+        "daily": all_dates,
+        "weekly": all_weeks,
+        "people": people_list,
+        "totalResolved": total_resolved,
+        "totalSubmitted": sum(dd["submitted"] for dd in all_dates),
+        "activeResolvers": sum(1 for p in people_list if p["total"] > 0),
+    }
+
+
+def fetch_evasion_data():
+    """Fetch evasion review data from Google Sheets."""
+    try:
+        result = subprocess.run(
+            ["uv", "run", "gdrive-cli.py", "sheets", "read", DRI_SHEET_ID,
+             "--sheet", EVASION_SHEET_TAB],
+            capture_output=True, text=True, cwd=GDRIVE_DIR, timeout=120
+        )
+        if result.returncode != 0:
+            print(f"Error fetching evasion sheet: {result.stderr[:200]}")
+            return []
+        data = json.loads(result.stdout)
+        return data.get("values", [])
+    except Exception as e:
+        print(f"Evasion fetch error: {e}")
+        return []
+
+
+def parse_evasion_data(rows):
+    """Parse evasion sheet into daily + weekly aggregates."""
+    if not rows or len(rows) < 2:
+        return None
+
+    daily_actioned = defaultdict(int)
+    daily_total = defaultdict(int)
+    weekly_actioned = defaultdict(int)
+    weekly_total = defaultdict(int)
+    person_daily = defaultdict(lambda: defaultdict(int))
+    person_weekly = defaultdict(lambda: defaultdict(int))
+    person_total = defaultdict(int)
+    action_counts = defaultdict(int)
+
+    for row in rows[1:]:
+        if len(row) < 5:
+            continue
+        submitter = row[0].strip().lower() if row[0] else ""
+        date_str = row[1].strip() if len(row) > 1 else ""
+        evasion_link = row[4].strip() if len(row) > 4 else ""
+
+        # Parse date — two formats: "M/D/YYYY" or "Mon D, YYYY, H:M:S AM/PM"
+        dt = None
+        try:
+            # Try short format first: 1/23/2026
+            if "/" in date_str and len(date_str) <= 12:
+                dt = datetime.strptime(date_str, "%m/%d/%Y")
+            else:
+                # Long format: "Feb 18, 2026, 9:50:38 PM"
+                # Extract just the date part: "Feb 18, 2026"
+                parts = date_str.split(", ")
+                if len(parts) >= 2:
+                    date_part = parts[0] + ", " + parts[1]
+                    for fmt in ("%B %d, %Y", "%b %d, %Y"):
+                        try:
+                            dt = datetime.strptime(date_part, fmt)
+                            break
+                        except ValueError:
+                            pass
+        except (ValueError, IndexError):
+            pass
+
+        if dt is None or dt < EVASION_START_DATE:
+            continue
+
+        date_key = dt.strftime("%Y-%m-%d")
+        week_start = dt - timedelta(days=dt.weekday())
+        week_key = week_start.strftime("%Y-%m-%d")
+
+        daily_total[date_key] += 1
+        weekly_total[week_key] += 1
+        action_counts[evasion_link] += 1
+
+        # Count as "actioned" if the evasion link is in the actioned set
+        is_actioned = evasion_link in EVASION_ACTIONED
+        if is_actioned:
+            daily_actioned[date_key] += 1
+            weekly_actioned[week_key] += 1
+
+        # Per-person tracking (all reviews, not just actioned)
+        name = EVASION_HANDLE_MAP.get(submitter)
+        if name:
+            person_daily[name][date_key] += 1
+            person_weekly[name][week_key] += 1
+            person_total[name] += 1
+
+    # Build ordered date list
+    today = datetime.now()
+    all_dates = []
+    d = EVASION_START_DATE
+    while d.date() <= today.date():
+        dk = d.strftime("%Y-%m-%d")
+        all_dates.append({
+            "date": d.strftime("%b %d"),
+            "count": daily_actioned.get(dk, 0),
+            "total": daily_total.get(dk, 0),
+            "dow": d.strftime("%a"),
+            "key": dk,
+        })
+        d += timedelta(days=1)
+
+    # Build ordered week list
+    all_weeks = []
+    week_keys_ordered = []
+    w = EVASION_START_DATE - timedelta(days=EVASION_START_DATE.weekday())
+    while w.date() <= today.date():
+        wk = w.strftime("%Y-%m-%d")
+        all_weeks.append({
+            "week": w.strftime("%b %d"),
+            "count": weekly_actioned.get(wk, 0),
+            "total": weekly_total.get(wk, 0),
+            "key": wk,
+        })
+        week_keys_ordered.append(wk)
+        w += timedelta(days=7)
+
+    # Per-person data
+    people_list = []
+    for name, total in sorted(person_total.items(), key=lambda x: -x[1]):
+        people_list.append({
+            "name": name, "total": total,
+            "daily": [person_daily[name].get(dd["key"], 0) for dd in all_dates],
+            "weekly": [person_weekly[name].get(wk, 0) for wk in week_keys_ordered],
+        })
+
+    total_actioned = sum(daily_actioned.values())
+    total_reviews = sum(daily_total.values())
+
+    # Action breakdown for pie/bar
+    action_breakdown = [{"action": k, "count": v} for k, v in sorted(action_counts.items(), key=lambda x: -x[1])]
+
+    return {
+        "daily": all_dates,
+        "weekly": all_weeks,
+        "people": people_list,
+        "totalActioned": total_actioned,
+        "totalReviews": total_reviews,
+        "activeReviewers": sum(1 for p in people_list if p["total"] > 0),
+        "actionBreakdown": action_breakdown,
+    }
+
+
+def fetch_bk_data():
+    """Fetch bankruptcy case reception data from Google Sheets."""
+    try:
+        result = subprocess.run(
+            ["uv", "run", "gdrive-cli.py", "sheets", "read", BK_SHEET_ID,
+             "--sheet", BK_SHEET_TAB],
+            capture_output=True, text=True, cwd=GDRIVE_DIR, timeout=120
+        )
+        if result.returncode != 0:
+            print(f"Error fetching BK sheet: {result.stderr[:200]}")
+            return []
+        data = json.loads(result.stdout)
+        return data.get("values", [])
+    except Exception as e:
+        print(f"BK fetch error: {e}")
+        return []
+
+
+def parse_bk_data(rows):
+    """Parse bankruptcy case reception sheet into daily + weekly aggregates.
+
+    Sheet structure: row 0 = header, row 1 = sub-header,
+    rows 2+ = date rows with cols: A=date, B-E=person counts, F=grand total.
+    Last row is "Grand Total" summary.
+    """
+    if not rows or len(rows) < 3:
+        return None
+
+    person_cols = {}  # col_index -> person_name
+    # Row 1 has person names in cols B-E (indices 1-4); row 0 is a summary header
+    header = rows[1] if len(rows) > 1 else []
+    for ci in range(1, min(len(header), 5)):
+        name = header[ci].strip() if ci < len(header) and header[ci] else ""
+        if name and name != "Grand Total" and name != "Date Received":
+            person_cols[ci] = name
+
+    daily_total = defaultdict(int)
+    weekly_total = defaultdict(int)
+    person_daily = defaultdict(lambda: defaultdict(int))
+    person_weekly = defaultdict(lambda: defaultdict(int))
+    person_total = defaultdict(int)
+
+    today = datetime.now()
+
+    for row in rows[2:]:
+        if not row or not row[0]:
+            continue
+        date_str = row[0].strip()
+        if date_str.lower() == "grand total":
+            break
+
+        # Parse date: expected format M/D/YYYY
+        dt = None
+        try:
+            dt = datetime.strptime(date_str, "%m/%d/%Y")
+        except ValueError:
+            try:
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                continue
+
+        if dt < BK_START_DATE or dt.date() > today.date():
+            continue
+
+        date_key = dt.strftime("%Y-%m-%d")
+        week_start = dt - timedelta(days=dt.weekday())
+        week_key = week_start.strftime("%Y-%m-%d")
+
+        row_total = 0
+        for ci, name in person_cols.items():
+            val = 0
+            if ci < len(row) and row[ci]:
+                try:
+                    val = int(float(row[ci]))
+                except (ValueError, TypeError):
+                    pass
+            if val > 0:
+                person_daily[name][date_key] += val
+                person_weekly[name][week_key] += val
+                person_total[name] += val
+                row_total += val
+
+        daily_total[date_key] += row_total
+        weekly_total[week_key] += row_total
+
+    # Build ordered date list from BK_START_DATE to today
+    all_dates = []
+    d = BK_START_DATE
+    while d.date() <= today.date():
+        dk = d.strftime("%Y-%m-%d")
+        all_dates.append({
+            "date": d.strftime("%b %d"),
+            "count": daily_total.get(dk, 0),
+            "dow": d.strftime("%a"),
+            "key": dk,
+        })
+        d += timedelta(days=1)
+
+    # Build ordered week list
+    all_weeks = []
+    week_keys_ordered = []
+    w = BK_START_DATE - timedelta(days=BK_START_DATE.weekday())
+    while w.date() <= today.date():
+        wk = w.strftime("%Y-%m-%d")
+        all_weeks.append({
+            "week": w.strftime("%b %d"),
+            "count": weekly_total.get(wk, 0),
+            "key": wk,
+        })
+        week_keys_ordered.append(wk)
+        w += timedelta(days=7)
+
+    # Per-person data
+    people_list = []
+    for name, total in sorted(person_total.items(), key=lambda x: -x[1]):
+        people_list.append({
+            "name": name, "total": total,
+            "daily": [person_daily[name].get(dd["key"], 0) for dd in all_dates],
+            "weekly": [person_weekly[name].get(wk, 0) for wk in week_keys_ordered],
+        })
+
+    # Include BK_TEAM members with 0 cases
+    active = {p["name"] for p in people_list}
+    for member in BK_TEAM:
+        if member not in active:
+            people_list.append({
+                "name": member, "total": 0,
+                "daily": [0] * len(all_dates),
+                "weekly": [0] * len(all_weeks),
+            })
+
+    total_received = sum(daily_total.values())
+
+    # Current month total
+    cur_month = today.strftime("%Y-%m")
+    month_total = sum(v for k, v in daily_total.items() if k.startswith(cur_month))
+
+    return {
+        "daily": all_dates,
+        "weekly": all_weeks,
+        "people": people_list,
+        "totalReceived": total_received,
+        "monthTotal": month_total,
+        "activeWorkers": sum(1 for p in people_list if p["total"] > 0),
+    }
+
+
+def get_sf_auth():
+    """Get access token and instance URL from sf CLI."""
+    result = subprocess.run(
+        ["sf", "org", "display", "--target-org", ORG_ALIAS, "--json"],
+        capture_output=True, text=True
+    )
+    data = json.loads(result.stdout)
+    info = data["result"]
+    return info["accessToken"], info["instanceUrl"]
+
+
+def fetch_report(access_token, instance_url, date_filter=None):
+    """Fetch report data from Salesforce Analytics API.
+
+    Args:
+        date_filter: dict to override standardDateFilter, e.g.
+            {"column":"CLOSED_DATEONLY","durationValue":"THIS_MONTH"}
+    """
+    url = f"{instance_url}/services/data/v62.0/analytics/reports/{REPORT_ID}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    ctx = ssl.create_default_context()
+
+    if date_filter:
+        body = json.dumps({"reportMetadata": {"standardDateFilter": date_filter}}).encode()
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    else:
+        req = urllib.request.Request(url, headers=headers)
+
+    with urllib.request.urlopen(req, context=ctx) as resp:
+        return json.loads(resp.read().decode())
+
+
+def fetch_queue_counts(access_token, instance_url):
+    """Fetch active case queue counts per owner from the queue report."""
+    url = f"{instance_url}/services/data/v62.0/analytics/reports/{QUEUE_REPORT_ID}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    ctx = ssl.create_default_context()
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, context=ctx) as resp:
+        data = json.loads(resp.read().decode())
+
+    fm = data.get("factMap", {})
+    gd = data.get("groupingsDown", {}).get("groupings", [])
+
+    # Build {owner_name: active_count} - normalize case for matching
+    queue = {}
+    for g in gd:
+        k = g["key"] + "!T"
+        aggs = fm.get(k, {}).get("aggregates", [])
+        count = aggs[0]["value"] if aggs else 0
+        queue[g["label"].strip()] = count
+
+    return queue
+
+
+def fetch_peak_queue_total(access_token, instance_url):
+    """Fetch total open cases from Post Origination Queues report."""
+    url = f"{instance_url}/services/data/v62.0/analytics/reports/{PEAK_REPORT_ID}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    ctx = ssl.create_default_context()
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, context=ctx) as resp:
+        data = json.loads(resp.read().decode())
+
+    fm = data.get("factMap", {})
+    gt = fm.get("T!T", {}).get("aggregates", [])
+    return gt[0]["value"] if gt else 0
+
+
+def _normalize_sf_name(name):
+    """Map Salesforce owner name to canonical team member name."""
+    return SF_NAME_ALIASES.get(name, name)
+
+
+def parse_report(data):
+    """Parse Salesforce report response into structured dashboard data."""
+    fact_map = data.get("factMap", {})
+    groupings_down = data.get("groupingsDown", {}).get("groupings", [])
+
+    team_data = []
+    total_cases = 0
+
+    for group in groupings_down:
+        owner = _normalize_sf_name(group["label"])
+        key = f"{group['key']}!T"
+        aggs = fact_map.get(key, {}).get("aggregates", [])
+        count = aggs[0]["value"] if aggs else 0
+        total_cases += count
+
+        # Get individual case details
+        cases = []
+        for status_group in group.get("groupings", []):
+            for date_group in status_group.get("groupings", []):
+                row_key = f"{date_group['key']}!T"
+                rows = fact_map.get(row_key, {}).get("rows", [])
+                for row in rows:
+                    cells = row.get("dataCells", [])
+                    if len(cells) >= 6:
+                        cases.append({
+                            "account": cells[0].get("label", ""),
+                            "caseNumber": cells[1].get("label", ""),
+                            "closedDate": cells[2].get("label", ""),
+                            "subject": cells[5].get("label", ""),
+                        })
+
+        team_data.append({
+            "name": owner,
+            "count": count,
+            "cases": cases
+        })
+
+    # Include team members with 0 cases
+    active_names = {td["name"] for td in team_data}
+    for member in TEAM_MEMBERS:
+        if member not in active_names:
+            team_data.append({"name": member, "count": 0, "cases": []})
+
+    # Sort by count descending
+    team_data.sort(key=lambda x: (-x["count"], x["name"]))
+
+    return {
+        "teamData": team_data,
+        "totalCases": total_cases,
+        "fetchedAt": datetime.now().strftime("%I:%M:%S %p"),
+        "reportDate": datetime.now().strftime("%A, %B %d, %Y"),
+    }
+
+
+def parse_monthly(data):
+    """Parse monthly report into daily totals and per-person daily counts."""
+    fm = data.get("factMap", {})
+    gd = data.get("groupingsDown", {}).get("groupings", [])
+
+    daily_total = defaultdict(int)
+    # {owner_name: {date_label: count}}
+    daily_by_person = defaultdict(lambda: defaultdict(int))
+
+    for owner_g in gd:
+        owner = _normalize_sf_name(owner_g["label"])
+        for status_g in owner_g.get("groupings", []):
+            for date_g in status_g.get("groupings", []):
+                date_label = date_g["label"]
+                k = date_g["key"] + "!T"
+                aggs = fm.get(k, {}).get("aggregates", [])
+                count = aggs[0]["value"] if aggs else 0
+                daily_total[date_label] += count
+                daily_by_person[owner][date_label] += count
+
+    # Build ordered date list for the full month
+    today = datetime.now()
+    year, month = today.year, today.month
+    num_days = calendar.monthrange(year, month)[1]
+    dates = []
+    for day in range(1, num_days + 1):
+        dt = datetime(year, month, day)
+        if dt.date() > today.date():
+            break
+        label = f"{month}/{day}/{year}"
+        dates.append({
+            "date": dt.strftime("%b %d"),
+            "count": daily_total.get(label, 0),
+            "dow": dt.strftime("%a"),
+            "sf_label": label,
+        })
+
+    # Build per-person series (only people who have any cases this month)
+    people = []
+    for member in TEAM_MEMBERS:
+        member_daily = daily_by_person.get(member, {})
+        month_total = sum(member_daily.values())
+        if month_total > 0:
+            counts = [member_daily.get(d["sf_label"], 0) for d in dates]
+            people.append({"name": member, "counts": counts, "total": month_total})
+
+    # Sort by total descending
+    people.sort(key=lambda x: -x["total"])
+
+    # Strip sf_label from output (not needed in JS)
+    result = [{"date": d["date"], "count": d["count"], "dow": d["dow"]} for d in dates]
+
+    return result, people
+
+
+def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_total=0, dri_data=None, evasion_data=None, bk_data=None):
+    """Build the HTML dashboard."""
+    team_json = json.dumps(dashboard_data["teamData"])
+    monthly_json = json.dumps(monthly_data)
+    people_json = json.dumps(people_data)
+    queue_json = json.dumps(queue_data or {})
+    peak_val = int(peak_total)
+    total = dashboard_data["totalCases"]
+
+    # DRI data
+    dri = dri_data or {"daily": [], "weekly": [], "people": [], "totalResolved": 0, "totalSubmitted": 0, "activeResolvers": 0}
+    dri_daily_json = json.dumps(dri["daily"])
+    dri_weekly_json = json.dumps(dri["weekly"])
+    dri_people_json = json.dumps(dri["people"])
+    dri_total = dri["totalResolved"]
+    dri_submitted = dri["totalSubmitted"]
+    dri_active = dri["activeResolvers"]
+
+    # Bankruptcy data
+    bk = bk_data or {"daily": [], "weekly": [], "people": [], "totalReceived": 0, "monthTotal": 0, "activeWorkers": 0}
+    bk_daily_json = json.dumps(bk["daily"])
+    bk_weekly_json = json.dumps(bk["weekly"])
+    bk_people_json = json.dumps(bk["people"])
+    bk_total = bk["totalReceived"]
+    bk_month = bk["monthTotal"]
+    bk_active = bk["activeWorkers"]
+
+    # Evasion data (manual reviews from Google Sheets)
+    ev = evasion_data or {"daily": [], "weekly": [], "people": [], "totalActioned": 0, "totalReviews": 0, "activeReviewers": 0, "actionBreakdown": []}
+    ev_daily_json = json.dumps(ev["daily"])
+    ev_weekly_json = json.dumps(ev["weekly"])
+    ev_people_json = json.dumps(ev["people"])
+    ev_total_actioned = ev["totalActioned"]
+    ev_total_reviews = ev["totalReviews"]
+    ev_active_reviewers = ev["activeReviewers"]
+    ev_breakdown_json = json.dumps(ev["actionBreakdown"])
+
+    # ML Evasion data (from Snowflake)
+    ml = build_ml_evasion_data()
+    ml_daily_json = json.dumps(ml["daily"])
+    ml_weekly_json = json.dumps(ml["weekly"])
+    ml_monthly_json = json.dumps(ml["monthlyByQueue"])
+    ml_queues_json = json.dumps(ml["queues"])
+    ml_people_json = json.dumps(ml["people"])
+    ml_total_2026 = ml["total2026"]
+    ml_current_month = ml["currentMonthTotal"]
+    fetched_at = dashboard_data["fetchedAt"]
+    report_date = dashboard_data["reportDate"]
+    max_count = max((d["count"] for d in dashboard_data["teamData"]), default=1) or 1
+    active_count = sum(1 for d in dashboard_data["teamData"] if d["count"] > 0)
+    month_label = datetime.now().strftime("%B %Y")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Productivity Dashboard</title>
+<style>
+  :root {{
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --accent: #3b82f6;
+    --accent2: #8b5cf6;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --bar-bg: #1e2130;
+  }}
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px;
+  }}
+
+  /* === Header === */
+  .header {{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }}
+  .header h1 {{
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }}
+  .header .subtitle {{
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 4px;
+  }}
+  .meta {{
+    text-align: right;
+    font-size: 12px;
+    color: var(--muted);
+  }}
+  .refresh-btn {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  }}
+  .refresh-btn:hover {{ background: #2563eb; }}
+  .refresh-btn:active {{ background: #1d4ed8; }}
+  .refresh-btn.loading {{
+    opacity: 0.6;
+    pointer-events: none;
+  }}
+  .refresh-btn.loading .refresh-icon {{
+    animation: spin 0.8s linear infinite;
+  }}
+  @keyframes spin {{
+    to {{ transform: rotate(360deg); }}
+  }}
+
+  /* === Tabs === */
+  .tabs {{
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }}
+  .tab {{
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }}
+  .tab:hover {{ color: var(--text); }}
+  .tab.active {{
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }}
+  .tab-content {{ display: none; }}
+  .tab-content.active {{ display: block; }}
+
+  /* === Sub-tabs (within DRI Work) === */
+  .subtabs {{
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }}
+  .subtab {{
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }}
+  .subtab:hover {{ color: var(--text); }}
+  .subtab.active {{
+    color: var(--text);
+    border-bottom-color: var(--accent2);
+  }}
+  .subtab-content {{ display: none; }}
+  .subtab-content.active {{ display: block; }}
+
+  /* === KPI === */
+  .kpi-row {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }}
+  .kpi {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }}
+  .kpi .label {{
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }}
+  .kpi .value {{
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }}
+  .kpi .value.blue {{ color: var(--accent); }}
+  .kpi .value.purple {{ color: var(--accent2); }}
+  .kpi .value.green {{ color: var(--green); }}
+
+  /* === Board / Leaderboard === */
+  .board {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }}
+  .board-header {{
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }}
+  .board-header h2 {{
+    font-size: 15px;
+    font-weight: 600;
+  }}
+  .row {{
+    display: grid;
+    grid-template-columns: 180px 90px 90px 1fr;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+  }}
+  .queue-count {{
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }}
+  .queue-count .q-num {{ color: var(--amber); }}
+  .queue-count .q-zero {{ color: #3f3f46; }}
+  .row:last-child {{ border-bottom: none; }}
+  .row:hover {{ background: rgba(59,130,246,0.04); }}
+  .row.zero {{ opacity: 0.45; }}
+  .name {{
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }}
+  .count {{
+    font-size: 18px;
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }}
+  .bar-track {{
+    height: 28px;
+    background: var(--bar-bg);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }}
+  .bar-fill {{
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    min-width: 2px;
+  }}
+  .row.zero .bar-fill {{ min-width: 0; background: transparent; }}
+
+  /* === Case Detail === */
+  .case-detail {{
+    display: none;
+    grid-column: 1 / -1;
+    padding: 0 0 8px 0;
+  }}
+  .case-detail.open {{ display: block; }}
+  .case-detail table {{
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+  }}
+  .case-detail th {{
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 4px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }}
+  .case-detail td {{
+    padding: 5px 8px;
+    color: var(--text);
+    border-top: 1px solid var(--border);
+  }}
+  .case-detail td a {{
+    color: var(--accent);
+    text-decoration: none;
+  }}
+  .case-detail td a:hover {{ text-decoration: underline; }}
+
+  /* === Rank badges === */
+  .rank {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }}
+  .rank.gold {{ background: #f59e0b22; color: #f59e0b; }}
+  .rank.silver {{ background: #94a3b822; color: #94a3b8; }}
+  .rank.bronze {{ background: #cd7f3222; color: #cd7f32; }}
+  .rank.default {{ background: var(--bar-bg); color: var(--muted); }}
+
+  .sf-link {{
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }}
+  .sf-link:hover {{ opacity: 1; text-decoration: underline; }}
+
+  /* === Chart === */
+  .chart-card {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }}
+  .chart-card .board-header {{
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }}
+  .chart-card .board-header h2 {{ font-size: 15px; font-weight: 600; }}
+  .chart-wrap {{
+    padding: 20px 20px 12px 20px;
+    position: relative;
+  }}
+  canvas#monthlyChart, canvas#driDailyChart, canvas#driWeeklyChart, canvas#bkDailyChart, canvas#bkWeeklyChart {{
+    width: 100% !important;
+    height: 340px !important;
+  }}
+  .legend {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 0 20px 16px 20px;
+  }}
+  .legend-item {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 4px;
+    transition: opacity 0.15s, background 0.15s;
+    user-select: none;
+  }}
+  .legend-item:hover {{ background: rgba(255,255,255,0.05); }}
+  .legend-item.off {{ opacity: 0.3; }}
+  .legend-swatch {{
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }}
+  .legend-total {{ font-weight: 600; color: var(--text); }}
+  .legend-person {{ color: var(--muted); }}
+
+  /* === Time Table === */
+  .time-table {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }}
+  .time-table .board-header {{
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }}
+  .time-table .board-header h2 {{ font-size: 15px; font-weight: 600; }}
+  .time-table .rate-note {{ font-size: 11px; color: var(--muted); }}
+  .time-table-wrap {{ overflow-x: auto; padding: 0; }}
+  .time-table table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    min-width: 600px;
+  }}
+  .time-table thead th {{
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 10px;
+    padding: 10px 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }}
+  .time-table thead th:first-child {{
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--card);
+  }}
+  .time-table tbody td {{
+    padding: 8px 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }}
+  .time-table tbody td:first-child {{
+    text-align: left;
+    font-weight: 500;
+    color: var(--text);
+    position: sticky;
+    left: 0;
+    background: var(--card);
+    z-index: 1;
+  }}
+  .time-table tbody tr:last-child td {{ border-bottom: none; }}
+  .time-table tbody tr:hover td {{ background: rgba(59,130,246,0.04); }}
+  .time-table tbody tr:hover td:first-child {{ background: rgba(59,130,246,0.04); }}
+  .time-cell {{ color: var(--text); }}
+  .time-cell.zero {{ color: #3f3f46; }}
+  .time-cell.light {{ color: #a1a1aa; }}
+  .time-cell.medium {{ color: var(--accent); }}
+  .time-cell.heavy {{ color: var(--amber); font-weight: 600; }}
+  .time-cell.over {{ color: #ef4444; font-weight: 700; }}
+  .time-total {{ font-weight: 700; color: var(--accent2); }}
+  .time-avg {{ color: var(--green); font-weight: 600; }}
+  .time-table tfoot td {{
+    padding: 10px 12px;
+    text-align: center;
+    border-top: 2px solid var(--border);
+    font-weight: 600;
+    color: var(--muted);
+  }}
+  .time-table tfoot td:first-child {{
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: var(--card);
+  }}
+
+  /* === Evasion tab layout === */
+  .evasion-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1600px;
+  }}
+  .evasion-grid > div {{
+    min-width: 0;  /* prevent grid blowout */
+  }}
+  .evasion-lb-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }}
+  @media (max-width: 1200px) {{
+    .evasion-grid {{
+      grid-template-columns: 1fr;
+    }}
+  }}
+  @media (max-width: 700px) {{
+    .evasion-lb-grid {{
+      grid-template-columns: 1fr;
+    }}
+  }}
+
+  /* === Placeholder sections (DRI / Evasion) === */
+  .section-card {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }}
+  .section-card .board-header {{
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }}
+  .section-card .board-header h2 {{ font-size: 15px; font-weight: 600; }}
+  .section-placeholder {{
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+  }}
+  .section-placeholder .placeholder-icon {{
+    font-size: 36px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }}
+  .section-placeholder p {{
+    font-size: 13px;
+    max-width: 420px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }}
+  .section-placeholder .config-hint {{
+    margin-top: 12px;
+    font-size: 11px;
+    color: #52525b;
+  }}
+  .tracker-table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }}
+  .tracker-table thead th {{
+    background: var(--card);
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 10px;
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }}
+  .tracker-table tbody td {{
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }}
+  .tracker-table tbody tr:last-child td {{ border-bottom: none; }}
+  .tracker-table tbody tr:hover td {{ background: rgba(59,130,246,0.04); }}
+  .status-badge {{
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }}
+  .status-badge.pending {{ background: #f59e0b22; color: #f59e0b; }}
+  .status-badge.active {{ background: #3b82f622; color: #3b82f6; }}
+  .status-badge.done {{ background: #22c55e22; color: #22c55e; }}
+  .status-badge.blocked {{ background: #ef444422; color: #ef4444; }}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Team Productivity Dashboard</h1>
+    <div class="subtitle">{report_date} &mdash; Capital / SFS</div>
+  </div>
+  <div class="meta">
+    <button class="refresh-btn" onclick="doRefresh(this)">
+      <span class="refresh-icon">&#x21bb;</span> Refresh
+    </button>
+    <div style="margin-top:6px">Updated {fetched_at}</div>
+    <div>Auto-refreshes every 30 min</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('cases')">Case Completion</div>
+  <div class="tab" onclick="switchTab('dri')">DRI Work</div>
+  <div class="tab" onclick="switchTab('evasion')">Evasion Cases</div>
+</div>
+
+<!-- ==================== TAB 1: Case Completion ==================== -->
+<div class="tab-content active" id="tab-cases">
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="label">Total Resolved Today</div>
+    <div class="value blue">{total}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Active Closers</div>
+    <div class="value purple">{active_count}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Team Avg</div>
+    <div class="value green">{total / len(TEAM_MEMBERS):.1f}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Daily Leaderboard</h2>
+      <a class="sf-link" href="https://squareinc.lightning.force.com/lightning/r/Report/{REPORT_ID}/view" target="_blank">Open in Salesforce</a>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="casesDailyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Completions Today</th>
+            <th style="text-align:right">Remaining Active</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Monthly Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">{month_label}</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="casesMonthlyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Completions</th>
+            <th style="text-align:right">Remaining Active</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Daily Resolved &mdash; {month_label}</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle lines</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="monthlyChart"></canvas>
+  </div>
+  <div class="legend" id="chartLegend"></div>
+</div>
+
+<div class="time-table">
+  <div class="board-header">
+    <h2>Estimated Time Spent</h2>
+    <span class="rate-note">8 cases/hr &mdash; {month_label}</span>
+  </div>
+  <div class="time-table-wrap">
+    <table>
+      <thead id="timeHead"></thead>
+      <tbody id="timeBody"></tbody>
+      <tfoot id="timeFoot"></tfoot>
+    </table>
+  </div>
+</div>
+
+</div><!-- /tab-cases -->
+
+<!-- ==================== TAB 2: DRI Work ==================== -->
+<div class="tab-content" id="tab-dri">
+
+<!-- Sub-tab navigation -->
+<div class="subtabs">
+  <div class="subtab active" onclick="switchSubTab('dri-collections')">SFS-Collections</div>
+  <div class="subtab" onclick="switchSubTab('dri-bankruptcy')">Bankruptcy Cases</div>
+</div>
+
+<!-- ---- Sub-tab: SFS-Collections ---- -->
+<div class="subtab-content active" id="subtab-dri-collections">
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="label">DRI Resolved (2026)</div>
+    <div class="value blue">{dri_total}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">DRI Submitted (2026)</div>
+    <div class="value purple">{dri_submitted}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Active Resolvers</div>
+    <div class="value green">{dri_active}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Daily Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">Today</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="driDailyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Completions</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Monthly Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">{month_label}</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="driMonthlyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Completions</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>SFS-Collections Completions &mdash; Daily &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="driDailyChart"></canvas>
+  </div>
+  <div class="legend" id="driDailyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>SFS-Collections Completions &mdash; Weekly &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="driWeeklyChart"></canvas>
+  </div>
+  <div class="legend" id="driWeeklyLegend"></div>
+</div>
+
+<div class="time-table">
+  <div class="board-header">
+    <h2>Estimated Time Spent</h2>
+    <span class="rate-note">8 cases/hr &mdash; {month_label}</span>
+  </div>
+  <div class="time-table-wrap">
+    <table>
+      <thead id="driTimeHead"></thead>
+      <tbody id="driTimeBody"></tbody>
+      <tfoot id="driTimeFoot"></tfoot>
+    </table>
+  </div>
+</div>
+
+</div><!-- /subtab-dri-collections -->
+
+<!-- ---- Sub-tab: Bankruptcy Cases ---- -->
+<div class="subtab-content" id="subtab-dri-bankruptcy">
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="label">Total Received (2026)</div>
+    <div class="value blue">{bk_total}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">This Month</div>
+    <div class="value purple">{bk_month}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Active Processors</div>
+    <div class="value green">{bk_active}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Daily Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">Today</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="bkDailyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Cases</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Monthly Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">{month_label}</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="bkMonthlyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Cases</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Bankruptcy Cases Received &mdash; Daily &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="bkDailyChart"></canvas>
+  </div>
+  <div class="legend" id="bkDailyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Bankruptcy Cases Received &mdash; Weekly &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="bkWeeklyChart"></canvas>
+  </div>
+  <div class="legend" id="bkWeeklyLegend"></div>
+</div>
+
+<div class="time-table">
+  <div class="board-header">
+    <h2>Estimated Time Spent</h2>
+    <span class="rate-note">8 cases/hr &mdash; {month_label}</span>
+  </div>
+  <div class="time-table-wrap">
+    <table>
+      <thead id="bkTimeHead"></thead>
+      <tbody id="bkTimeBody"></tbody>
+      <tfoot id="bkTimeFoot"></tfoot>
+    </table>
+  </div>
+</div>
+
+</div><!-- /subtab-dri-bankruptcy -->
+
+</div><!-- /tab-dri -->
+
+<!-- ==================== TAB 3: Evasion Cases ==================== -->
+<div class="tab-content" id="tab-evasion">
+
+<!-- KPI Row spanning full width -->
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="label">ML Cases Closed (2026)</div>
+    <div class="value blue">{ml_total_2026}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">ML Cases This Month</div>
+    <div class="value green">{ml_current_month}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Manual Reviews (2026)</div>
+    <div class="value purple">{ev_total_reviews}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Actioned (SBI + Linked)</div>
+    <div class="value green">{ev_total_actioned}</div>
+  </div>
+</div>
+
+<!-- Side-by-side grid: ML left, Cap-Evasion right -->
+<div class="evasion-grid">
+
+<!-- ---- LEFT COLUMN: ML Evasion Cases ---- -->
+<div>
+<div style="border-left:3px solid #3b82f6;padding-left:12px;margin-bottom:12px">
+  <h2 style="margin:0;font-size:16px;color:#3b82f6">ML Evasion Cases</h2>
+  <span style="font-size:11px;color:var(--muted)">Source: Snowflake &mdash; APP_CAPITAL.OPERATIONS_CASES_REPORTING</span>
+</div>
+
+<div class="evasion-lb-grid">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Daily Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">Today</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="mlDailyLB">
+        <thead><tr><th>#</th><th>Name</th><th style="text-align:right">Cases</th><th style="text-align:right">Est. Hours</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Monthly Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">{month_label}</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="mlMonthlyLB">
+        <thead><tr><th>#</th><th>Name</th><th style="text-align:right">Cases</th><th style="text-align:right">Est. Hours</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>ML Cases &mdash; Daily</h2>
+    <span style="font-size:12px;color:var(--muted)">Toggle queues &amp; people</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="mlDailyChart"></canvas>
+  </div>
+  <div class="legend" id="mlDailyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>ML Cases &mdash; Weekly</h2>
+    <span style="font-size:12px;color:var(--muted)">Toggle queues &amp; people</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="mlWeeklyChart"></canvas>
+  </div>
+  <div class="legend" id="mlWeeklyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>ML Cases by Queue &mdash; Monthly</h2>
+    <span style="font-size:12px;color:var(--muted)">Stacked bar</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="mlQueueChart"></canvas>
+  </div>
+</div>
+</div><!-- /left column -->
+
+<!-- ---- RIGHT COLUMN: Cap-Evasion Manual Reviews ---- -->
+<div>
+<div style="border-left:3px solid #22c55e;padding-left:12px;margin-bottom:12px">
+  <h2 style="margin:0;font-size:16px;color:#22c55e">Cap-Evasion Manual Reviews</h2>
+  <span style="font-size:11px;color:var(--muted)">Source: Google Sheets &mdash; #cap-evasion shift schedule</span>
+</div>
+
+<div class="evasion-lb-grid">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Daily Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">Today</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="evDailyLB">
+        <thead><tr><th>#</th><th>Name</th><th style="text-align:right">Reviews</th><th style="text-align:right">Est. Hours</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Monthly Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">{month_label}</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="evMonthlyLB">
+        <thead><tr><th>#</th><th>Name</th><th style="text-align:right">Reviews</th><th style="text-align:right">Est. Hours</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Manual Reviews &mdash; Daily</h2>
+    <span style="font-size:12px;color:var(--muted)">Toggle people</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="evDailyChart"></canvas>
+  </div>
+  <div class="legend" id="evDailyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Manual Reviews &mdash; Weekly</h2>
+    <span style="font-size:12px;color:var(--muted)">Toggle people</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="evWeeklyChart"></canvas>
+  </div>
+  <div class="legend" id="evWeeklyLegend"></div>
+</div>
+
+<div class="section-card">
+  <div class="board-header">
+    <h2>Action Breakdown</h2>
+    <span style="font-size:12px;color:var(--muted)">All reviews &mdash; 2026</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 200px;gap:20px;align-items:center">
+    <canvas id="evBreakdownChart" style="width:100%;height:220px"></canvas>
+    <div id="evBreakdownLegend" style="font-size:12px;line-height:1.8"></div>
+  </div>
+</div>
+</div><!-- /right column -->
+
+</div><!-- /side-by-side grid -->
+
+<!-- ---- Full-width: Combined Estimated Time Spent ---- -->
+<div style="border-left:3px solid #f59e0b;padding-left:12px;margin:20px 0 8px">
+  <h2 style="margin:0;font-size:16px;color:#f59e0b">Combined Estimated Time Spent</h2>
+  <span style="font-size:11px;color:var(--muted)">ML Cases + Cap-Evasion Manual Reviews &mdash; 8 cases/hr</span>
+</div>
+
+<div class="time-table">
+  <div class="board-header">
+    <h2>Estimated Time Spent &mdash; {month_label}</h2>
+    <span class="rate-note">8 cases/hr &mdash; ML + Manual combined</span>
+  </div>
+  <div class="time-table-wrap">
+    <table>
+      <thead id="evTimeHead"></thead>
+      <tbody id="evTimeBody"></tbody>
+      <tfoot id="evTimeFoot"></tfoot>
+    </table>
+  </div>
+</div>
+
+</div><!-- /tab-evasion -->
+
+<script>
+// === Tab Switching ===
+function switchTab(id) {{
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  // Find the clicked tab by matching text
+  const labels = {{ cases: 'Case Completion', dri: 'DRI Work', evasion: 'Evasion Cases' }};
+  document.querySelectorAll('.tab').forEach(el => {{
+    if (el.textContent === labels[id]) el.classList.add('active');
+  }});
+  // Redraw charts when switching tabs (canvas needs resize)
+  if (id === 'cases' && typeof drawChart === 'function') {{
+    setTimeout(drawChart, 50);
+  }}
+  if (id === 'dri') {{
+    redrawActiveSubTab();
+  }}
+  if (id === 'evasion') {{
+    if (typeof drawMlDailyChart === 'function') setTimeout(drawMlDailyChart, 50);
+    if (typeof drawMlWeeklyChart === 'function') setTimeout(drawMlWeeklyChart, 60);
+    if (typeof drawMlQueueChart === 'function') setTimeout(drawMlQueueChart, 70);
+    if (typeof drawEvDailyChart === 'function') setTimeout(drawEvDailyChart, 80);
+    if (typeof drawEvWeeklyChart === 'function') setTimeout(drawEvWeeklyChart, 100);
+    if (typeof drawEvBreakdown === 'function') setTimeout(drawEvBreakdown, 120);
+  }}
+}}
+
+// === Sub-tab Switching (within DRI Work) ===
+function switchSubTab(id) {{
+  document.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
+  document.getElementById('subtab-' + id).classList.add('active');
+  const subLabels = {{ 'dri-collections': 'SFS-Collections', 'dri-bankruptcy': 'Bankruptcy Cases' }};
+  document.querySelectorAll('.subtab').forEach(el => {{
+    if (el.textContent === subLabels[id]) el.classList.add('active');
+  }});
+  // Redraw charts for the activated sub-tab
+  setTimeout(redrawActiveSubTab, 50);
+}}
+
+function redrawActiveSubTab() {{
+  const colActive = document.getElementById('subtab-dri-collections');
+  const bkActive = document.getElementById('subtab-dri-bankruptcy');
+  if (colActive && colActive.classList.contains('active')) {{
+    if (typeof drawDriDailyChart === 'function') setTimeout(drawDriDailyChart, 50);
+    if (typeof drawDriWeeklyChart === 'function') setTimeout(drawDriWeeklyChart, 80);
+  }}
+  if (bkActive && bkActive.classList.contains('active')) {{
+    if (typeof drawBkDailyChart === 'function') setTimeout(drawBkDailyChart, 50);
+    if (typeof drawBkWeeklyChart === 'function') setTimeout(drawBkWeeklyChart, 80);
+  }}
+}}
+
+// === Monthly Multi-Line Chart ===
+const monthlyData = {monthly_json};
+const peopleData = {people_json};
+const peakQueueTotal = {peak_val};
+
+const PERSON_COLORS = [
+  '#f59e0b','#ef4444','#22c55e','#a855f7','#ec4899',
+  '#06b6d4','#f97316','#6366f1','#14b8a6','#e879f9',
+  '#84cc16','#fb923c'
+];
+
+// Visibility state: index -1 = team total, 0..N = person index
+const visible = {{ '-1': true }};
+peopleData.forEach((_, i) => {{ visible[i] = false; }});
+
+function buildLegend() {{
+  const el = document.getElementById('chartLegend');
+  el.innerHTML = '';
+  // Team total toggle
+  const totalItem = document.createElement('span');
+  totalItem.className = 'legend-item legend-total' + (visible['-1'] ? '' : ' off');
+  totalItem.innerHTML = '<span class="legend-swatch" style="background:#3b82f6"></span>Team Total';
+  totalItem.onclick = () => {{ visible['-1'] = !visible['-1']; buildLegend(); drawChart(); }};
+  el.appendChild(totalItem);
+
+  // Individual toggles
+  peopleData.forEach((p, i) => {{
+    const item = document.createElement('span');
+    const color = PERSON_COLORS[i % PERSON_COLORS.length];
+    item.className = 'legend-item legend-person' + (visible[i] ? '' : ' off');
+    const firstName = p.name.split(' ')[0];
+    item.innerHTML = `<span class="legend-swatch" style="background:${{color}}"></span>${{firstName}} (${{p.total}})`;
+    item.onclick = () => {{ visible[i] = !visible[i]; buildLegend(); drawChart(); }};
+    el.appendChild(item);
+  }});
+
+  // Show All / Hide All
+  const anyPersonOn = peopleData.some((_, i) => visible[i]);
+  const toggle = document.createElement('span');
+  toggle.className = 'legend-item';
+  toggle.style.color = 'var(--accent)';
+  toggle.style.fontWeight = '500';
+  toggle.textContent = anyPersonOn ? 'Hide All' : 'Show All';
+  toggle.onclick = () => {{
+    const newVal = !anyPersonOn;
+    peopleData.forEach((_, i) => {{ visible[i] = newVal; }});
+    buildLegend();
+    drawChart();
+  }};
+  el.appendChild(toggle);
+}}
+
+(function() {{
+  const canvas = document.getElementById('monthlyChart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  window.drawChart = function() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width;
+    const H = 340;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = {{ top: 24, right: 20, bottom: 40, left: 50 }};
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = monthlyData.length;
+    if (n < 1) return;
+
+    // Compute yMax from visible series (include peak line)
+    let maxVal = 1;
+    if (visible['-1']) maxVal = Math.max(maxVal, ...monthlyData.map(d => d.count));
+    peopleData.forEach((p, i) => {{
+      if (visible[i]) maxVal = Math.max(maxVal, ...p.counts);
+    }});
+    if (peakQueueTotal > 0) maxVal = Math.max(maxVal, peakQueueTotal);
+    const yMax = Math.ceil(maxVal / 10) * 10 || 10;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Y-axis gridlines
+    ctx.strokeStyle = '#2a2d3a';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a';
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    const yTicks = 5;
+    for (let i = 0; i <= yTicks; i++) {{
+      const val = Math.round(yMax * i / yTicks);
+      const y = pad.top + ch - (ch * i / yTicks);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(W - pad.right, y);
+      ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }}
+
+    const xStep = n > 1 ? cw / (n - 1) : cw;
+
+    // Helper: draw a line series
+    function drawLine(counts, color, width, dashed) {{
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.setLineDash(dashed || []);
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }}
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }}
+
+    // Helper: draw dots
+    function drawDots(counts, color, radius) {{
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }}
+    }}
+
+    // Draw peak queue reference line
+    if (peakQueueTotal > 0) {{
+      const peakY = pad.top + ch - (ch * peakQueueTotal / yMax);
+      ctx.beginPath();
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.moveTo(pad.left, peakY);
+      ctx.lineTo(W - pad.right, peakY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Label
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 10px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('Queue: ' + peakQueueTotal, W - pad.right, peakY - 5);
+    }}
+
+    // Draw individual person lines first (behind total)
+    peopleData.forEach((p, idx) => {{
+      if (!visible[idx]) return;
+      const color = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p.counts, color, 1.8);
+      drawDots(p.counts, color, 2.5);
+    }});
+
+    // Draw team total line
+    if (visible['-1']) {{
+      const counts = monthlyData.map(d => d.count);
+
+      // Area fill
+      const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      gradient.addColorStop(0, 'rgba(59,130,246,0.18)');
+      gradient.addColorStop(1, 'rgba(59,130,246,0.01)');
+      ctx.beginPath();
+      ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.lineTo(x, y);
+      }}
+      ctx.lineTo(pad.left + (n - 1) * xStep, pad.top + ch);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      drawLine(counts, '#3b82f6', 2.5);
+
+      // Dots + value labels for total
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        const isToday = i === n - 1;
+
+        ctx.beginPath();
+        ctx.arc(x, y, isToday ? 5 : 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = isToday ? '#22c55e' : '#3b82f6';
+        ctx.fill();
+        if (isToday) {{
+          ctx.strokeStyle = '#22c55e44';
+          ctx.lineWidth = 6;
+          ctx.stroke();
+        }}
+
+        ctx.fillStyle = '#e4e4e7';
+        ctx.font = (isToday ? 'bold ' : '') + '11px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(counts[i], x, y - 10);
+      }}
+    }}
+
+    // X-axis labels
+    for (let i = 0; i < n; i++) {{
+      const x = pad.left + i * xStep;
+      const isToday = i === n - 1;
+
+      ctx.fillStyle = isToday ? '#22c55e' : '#71717a';
+      ctx.font = '10px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(monthlyData[i].date, x, H - pad.bottom + 16);
+
+      ctx.fillStyle = '#52525b';
+      ctx.font = '9px -apple-system, sans-serif';
+      ctx.fillText(monthlyData[i].dow, x, H - pad.bottom + 28);
+    }}
+
+    // Tooltip on hover - show values for all visible series
+    canvas.onmousemove = function(e) {{
+      const rect2 = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect2.left;
+      const closestIdx = Math.round((mx - pad.left) / xStep);
+      if (closestIdx < 0 || closestIdx >= n) {{ canvas.title = ''; return; }}
+      let tip = monthlyData[closestIdx].date + ' (' + monthlyData[closestIdx].dow + ')\\n';
+      if (visible['-1']) tip += 'Team Total: ' + monthlyData[closestIdx].count + '\\n';
+      peopleData.forEach((p, pi) => {{
+        if (visible[pi]) tip += p.name.split(' ')[0] + ': ' + p.counts[closestIdx] + '\\n';
+      }});
+      canvas.title = tip.trim();
+    }};
+  }};
+
+  drawChart();
+  buildLegend();
+  window.addEventListener('resize', drawChart);
+}})();
+
+// === Time Spent Table ===
+(function() {{
+  const CASES_PER_HOUR = 8;
+  const n = monthlyData.length;
+
+  function fmtTime(cases) {{
+    if (cases === 0) return {{ text: '--', cls: 'zero' }};
+    const hrs = cases / CASES_PER_HOUR;
+    const h = Math.floor(hrs);
+    const m = Math.round((hrs - h) * 60);
+    const text = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
+    let cls = 'light';
+    if (hrs >= 8) cls = 'over';
+    else if (hrs >= 6) cls = 'heavy';
+    else if (hrs >= 3) cls = 'medium';
+    else if (hrs >= 1) cls = 'light';
+    return {{ text: text.trim(), cls }};
+  }}
+
+  // Header: Name | date columns | Month Total | Daily Avg
+  const thead = document.getElementById('timeHead');
+  let hrow = '<tr><th>Name</th>';
+  // Only show working days (skip weekends with 0 team total)
+  const dayIndices = [];
+  for (let i = 0; i < n; i++) {{
+    const dow = monthlyData[i].dow;
+    if (dow === 'Sat' || dow === 'Sun') continue;
+    dayIndices.push(i);
+    hrow += '<th>' + monthlyData[i].date.split(' ')[1] + '<br>' + dow + '</th>';
+  }}
+  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  thead.innerHTML = hrow;
+
+  // Body rows per person (sorted by total desc, same as peopleData)
+  const tbody = document.getElementById('timeBody');
+  let bodyHtml = '';
+
+  // Also track column totals for footer
+  const colTotals = new Array(dayIndices.length).fill(0);
+  let grandTotal = 0;
+
+  peopleData.forEach(p => {{
+    const firstName = p.name.split(' ')[0];
+    let row = '<tr><td>' + p.name + '</td>';
+    let personWorkDays = 0;
+    dayIndices.forEach((di, ci) => {{
+      const c = p.counts[di];
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      if (c > 0) personWorkDays++;
+    }});
+    // Month total
+    const totalTime = fmtTime(p.total);
+    row += '<td class="time-total">' + totalTime.text + '</td>';
+    // Daily avg (over working days they were active)
+    const avgCases = personWorkDays > 0 ? Math.round(p.total / personWorkDays) : 0;
+    const avgTime = fmtTime(avgCases);
+    row += '<td class="time-avg">' + avgTime.text + '</td>';
+    row += '</tr>';
+    bodyHtml += row;
+  }});
+
+  // Add rows for team members with 0 cases
+  const activePeople = new Set(peopleData.map(p => p.name));
+  const allMembers = {json.dumps(TEAM_MEMBERS)};
+  allMembers.forEach(name => {{
+    if (activePeople.has(name)) return;
+    let row = '<tr><td>' + name + '</td>';
+    dayIndices.forEach(() => {{
+      row += '<td class="time-cell zero">--</td>';
+    }});
+    row += '<td class="time-cell zero">--</td><td class="time-cell zero">--</td></tr>';
+    bodyHtml += row;
+  }});
+
+  tbody.innerHTML = bodyHtml;
+
+  // Footer: team totals per day
+  const tfoot = document.getElementById('timeFoot');
+  let frow = '<tr><td>Team Total</td>';
+  dayIndices.forEach((di, ci) => {{
+    const t = fmtTime(colTotals[ci]);
+    frow += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+  }});
+  const teamGrandTotal = colTotals.reduce((a, b) => a + b, 0);
+  const gt = fmtTime(teamGrandTotal);
+  const workingDays = dayIndices.filter((di, ci) => colTotals[ci] > 0).length;
+  const teamAvg = fmtTime(workingDays > 0 ? Math.round(teamGrandTotal / workingDays) : 0);
+  frow += '<td class="time-total">' + gt.text + '</td>';
+  frow += '<td class="time-avg">' + teamAvg.text + '</td>';
+  frow += '</tr>';
+  tfoot.innerHTML = frow;
+}})();
+
+const teamData = {team_json};
+const queueData = {queue_json};
+const SFBASE = "https://squareinc.lightning.force.com/lightning/r/Case/";
+
+// Build case-insensitive lookup for queue counts
+const queueLookup = {{}};
+Object.keys(queueData).forEach(k => {{ queueLookup[k.toLowerCase()] = queueData[k]; }});
+function getQueue(name) {{
+  if (queueData[name] !== undefined) return queueData[name];
+  return queueLookup[name.toLowerCase()] ?? null;
+}}
+
+// === Case Completion Daily Leaderboard ===
+(function() {{
+  const tbody = document.querySelector('#casesDailyLB tbody');
+  if (!tbody) return;
+  // teamData is already sorted by count desc
+  let html = '';
+  teamData.forEach((m, i) => {{
+    const q = getQueue(m.name);
+    const qText = q === null ? '--' : q;
+    const cls = m.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + m.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + m.count + '</td>';
+    html += '<td style="text-align:right;color:' + (q > 0 ? 'var(--amber)' : 'var(--muted)') + ';font-variant-numeric:tabular-nums">' + qText + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// === Case Completion Monthly Leaderboard ===
+(function() {{
+  const tbody = document.querySelector('#casesMonthlyLB tbody');
+  if (!tbody) return;
+  // peopleData has monthly totals; also include 0-case members
+  const activePeople = new Set(peopleData.map(p => p.name));
+  const allMembers = {json.dumps(TEAM_MEMBERS)};
+  const merged = [...peopleData];
+  allMembers.forEach(name => {{
+    if (!activePeople.has(name)) merged.push({{ name: name, total: 0 }});
+  }});
+  merged.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+  let html = '';
+  merged.forEach((p, i) => {{
+    const q = getQueue(p.name);
+    const qText = q === null ? '--' : q;
+    const cls = p.total === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.total + '</td>';
+    html += '<td style="text-align:right;color:' + (q > 0 ? 'var(--amber)' : 'var(--muted)') + ';font-variant-numeric:tabular-nums">' + qText + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// ============================================================
+// === DRI Work Tab ===
+// ============================================================
+const driDaily = {dri_daily_json};
+const driWeekly = {dri_weekly_json};
+const driPeople = {dri_people_json};
+
+// Shared visibility state for both DRI charts
+const driVis = {{ 'sub': true, 'res': true }};
+driPeople.forEach((_, i) => {{ driVis['p' + i] = false; }});
+
+// Generic DRI chart drawing function (reused for daily & weekly)
+function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  return function draw() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = {{ top: 24, right: 20, bottom: 48, left: 50 }};
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = dataArr.length;
+    if (n < 1) return;
+
+    let maxVal = 1;
+    if (driVis.sub) maxVal = Math.max(maxVal, ...dataArr.map(d => d.submitted));
+    if (driVis.res) maxVal = Math.max(maxVal, ...dataArr.map(d => d.count));
+    driPeople.forEach((p, i) => {{
+      if (driVis['p'+i]) maxVal = Math.max(maxVal, ...p[personKey]);
+    }});
+    const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {{
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }}
+
+    const xStep = n > 1 ? cw / (n - 1) : cw;
+    function drawLine(counts, color, w, dashed) {{
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dashed || []);
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }}
+      ctx.stroke(); ctx.setLineDash([]);
+    }}
+    function drawDots(counts, color, r) {{
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }}
+    }}
+    function drawArea(counts, color) {{
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, color + '22'); grad.addColorStop(1, color + '02');
+      ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) ctx.lineTo(pad.left + i * xStep, pad.top + ch - (ch * counts[i] / yMax));
+      ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }}
+
+    driPeople.forEach((p, idx) => {{
+      if (!driVis['p'+idx]) return;
+      const c = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p[personKey], c, 1.5); drawDots(p[personKey], c, 2);
+    }});
+
+    if (driVis.sub) {{
+      const c = dataArr.map(d => d.submitted);
+      drawArea(c, '#8b5cf6'); drawLine(c, '#8b5cf6', 2); drawDots(c, '#8b5cf6', 2.5);
+    }}
+    if (driVis.res) {{
+      const c = dataArr.map(d => d.count);
+      drawArea(c, '#3b82f6'); drawLine(c, '#3b82f6', 2.5); drawDots(c, '#3b82f6', 2.5);
+    }}
+
+    ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    const skip = skipMod || Math.max(1, Math.ceil(n / 20));
+    for (let i = 0; i < n; i++) {{
+      if (i % skip !== 0 && i !== n - 1) continue;
+      const x = pad.left + i * xStep;
+      const label = getLabelFn(dataArr[i], i);
+      ctx.save(); ctx.translate(x, H - pad.bottom + 14);
+      if (n > 20) ctx.rotate(-0.45);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }}
+
+    canvas.onmousemove = function(e) {{
+      const r2 = canvas.getBoundingClientRect();
+      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
+      const d = dataArr[ci];
+      let tip = getLabelFn(d, ci) + '\\n';
+      if (driVis.sub) tip += 'Submitted: ' + d.submitted + '\\n';
+      if (driVis.res) tip += 'Resolved: ' + d.count + '\\n';
+      driPeople.forEach((p, pi) => {{
+        if (driVis['p'+pi] && p[personKey][ci] > 0) tip += p.name.split(' ')[0] + ': ' + p[personKey][ci] + '\\n';
+      }});
+      canvas.title = tip.trim();
+    }};
+  }};
+}}
+
+function buildDriLegend(legendId, redrawFns) {{
+  const el = document.getElementById(legendId);
+  if (!el) return;
+  el.innerHTML = '';
+  const mk = (lbl, col, key) => {{
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-total' + (driVis[key] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{col}}"></span>${{lbl}}`;
+    item.onclick = () => {{ driVis[key] = !driVis[key]; rebuildDriLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }};
+  mk('Submitted', '#8b5cf6', 'sub'); mk('Resolved', '#3b82f6', 'res');
+  driPeople.forEach((p, i) => {{
+    if (p.total === 0) return;
+    const item = document.createElement('span');
+    const c = PERSON_COLORS[i % PERSON_COLORS.length];
+    item.className = 'legend-item legend-person' + (driVis['p'+i] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{c}}"></span>${{p.name.split(' ')[0]}} (${{p.total}})`;
+    item.onclick = () => {{ driVis['p'+i] = !driVis['p'+i]; rebuildDriLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }});
+  const anyOn = driPeople.some((_, i) => driVis['p'+i]);
+  const tog = document.createElement('span');
+  tog.className = 'legend-item'; tog.style.cssText = 'color:var(--accent);font-weight:500';
+  tog.textContent = anyOn ? 'Hide All' : 'Show All';
+  tog.onclick = () => {{
+    const v = !anyOn; driPeople.forEach((_, i) => {{ driVis['p'+i] = v; }});
+    rebuildDriLegends(); redrawFns.forEach(f => f());
+  }};
+  el.appendChild(tog);
+}}
+
+// Create chart draw functions
+const _drawDriDaily = driChartEngine('driDailyChart', driDaily, 'daily',
+  (d) => d.date + ' ' + d.dow, 0);
+const _drawDriWeekly = driChartEngine('driWeeklyChart', driWeekly, 'weekly',
+  (d) => 'Wk ' + d.week, 1);
+
+window.drawDriDailyChart = _drawDriDaily || (() => {{}});
+window.drawDriWeeklyChart = _drawDriWeekly || (() => {{}});
+
+const _allDriRedraw = [window.drawDriDailyChart, window.drawDriWeeklyChart];
+function rebuildDriLegends() {{
+  buildDriLegend('driDailyLegend', _allDriRedraw);
+  buildDriLegend('driWeeklyLegend', _allDriRedraw);
+}}
+rebuildDriLegends();
+
+window.addEventListener('resize', () => {{
+  if (document.getElementById('tab-dri').classList.contains('active')) {{
+    window.drawDriDailyChart(); window.drawDriWeeklyChart();
+  }}
+}});
+
+// === DRI Time Spent Table (current month daily — same format as Case Completion) ===
+(function() {{
+  const CASES_PER_HOUR = 8;
+  if (driDaily.length === 0) return;
+
+  function fmtTime(cases) {{
+    if (cases === 0) return {{ text: '--', cls: 'zero' }};
+    const hrs = cases / CASES_PER_HOUR;
+    const h = Math.floor(hrs);
+    const m = Math.round((hrs - h) * 60);
+    const text = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
+    let cls = 'light';
+    if (hrs >= 8) cls = 'over';
+    else if (hrs >= 6) cls = 'heavy';
+    else if (hrs >= 3) cls = 'medium';
+    else if (hrs >= 1) cls = 'light';
+    return {{ text: text.trim(), cls }};
+  }}
+
+  // Filter to current month working days
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const dayIndices = [];
+  const dayMeta = [];
+  driDaily.forEach((d, idx) => {{
+    if (!d.key.startsWith(curPrefix)) return;
+    if (d.dow === 'Sat' || d.dow === 'Sun') return;
+    dayIndices.push(idx);
+    dayMeta.push(d);
+  }});
+
+  if (dayIndices.length === 0) return;
+
+  const thead = document.getElementById('driTimeHead');
+  let hrow = '<tr><th>Name</th>';
+  dayMeta.forEach(d => {{
+    hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
+  }});
+  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  thead.innerHTML = hrow;
+
+  const tbody = document.getElementById('driTimeBody');
+  let bodyHtml = '';
+  const colTotals = new Array(dayIndices.length).fill(0);
+
+  driPeople.forEach(p => {{
+    let monthTotal = 0;
+    let workDays = 0;
+    let row = '<tr><td>' + p.name + '</td>';
+    dayIndices.forEach((di, ci) => {{
+      const c = p.daily[di];
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      monthTotal += c;
+      if (c > 0) workDays++;
+    }});
+    const totalT = fmtTime(monthTotal);
+    row += '<td class="time-total">' + totalT.text + '</td>';
+    const avgC = workDays > 0 ? Math.round(monthTotal / workDays) : 0;
+    row += '<td class="time-avg">' + fmtTime(avgC).text + '</td>';
+    row += '</tr>';
+    bodyHtml += row;
+  }});
+  tbody.innerHTML = bodyHtml;
+
+  const tfoot = document.getElementById('driTimeFoot');
+  let frow = '<tr><td>Team Total</td>';
+  dayIndices.forEach((_, ci) => {{
+    const t = fmtTime(colTotals[ci]);
+    frow += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+  }});
+  const gt = colTotals.reduce((a, b) => a + b, 0);
+  const wd = colTotals.filter(c => c > 0).length || 1;
+  frow += '<td class="time-total">' + fmtTime(gt).text + '</td>';
+  frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
+  frow += '</tr>';
+  tfoot.innerHTML = frow;
+}})();
+
+// === DRI Daily Leaderboard (today) ===
+(function() {{
+  const tbody = document.querySelector('#driDailyLB tbody');
+  if (!tbody || driDaily.length === 0) return;
+  // Get today's index (last entry in driDaily)
+  const todayIdx = driDaily.length - 1;
+  // Build per-person today counts
+  const todayData = driPeople.map(p => ({{ name: p.name, count: p.daily[todayIdx] || 0 }}));
+  todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  todayData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// === DRI Monthly Leaderboard (current month) ===
+(function() {{
+  const tbody = document.querySelector('#driMonthlyLB tbody');
+  if (!tbody || driDaily.length === 0) return;
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  // Sum current month per person
+  const monthIndices = [];
+  driDaily.forEach((d, idx) => {{ if (d.key.startsWith(curPrefix)) monthIndices.push(idx); }});
+
+  const monthData = driPeople.map(p => {{
+    let sum = 0;
+    monthIndices.forEach(idx => {{ sum += p.daily[idx] || 0; }});
+    return {{ name: p.name, count: sum }};
+  }});
+  monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  monthData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// ============================================================
+// === Bankruptcy Cases Sub-tab ===
+// ============================================================
+const bkDaily = {bk_daily_json};
+const bkWeekly = {bk_weekly_json};
+const bkPeople = {bk_people_json};
+
+// Shared visibility state for BK charts
+const bkVis = {{ 'total': true }};
+bkPeople.forEach((_, i) => {{ bkVis['p' + i] = false; }});
+
+// Reuse driChartEngine pattern for BK charts
+function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  return function draw() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = {{ top: 24, right: 20, bottom: 48, left: 50 }};
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = dataArr.length;
+    if (n < 1) return;
+
+    let maxVal = 1;
+    if (bkVis.total) maxVal = Math.max(maxVal, ...dataArr.map(d => d.count));
+    bkPeople.forEach((p, i) => {{
+      if (bkVis['p'+i]) maxVal = Math.max(maxVal, ...p[personKey]);
+    }});
+    const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {{
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }}
+
+    const xStep = n > 1 ? cw / (n - 1) : cw;
+    function drawLine(counts, color, w) {{
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }}
+      ctx.stroke();
+    }}
+    function drawDots(counts, color, r) {{
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }}
+    }}
+    function drawArea(counts, color) {{
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, color + '22'); grad.addColorStop(1, color + '02');
+      ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) ctx.lineTo(pad.left + i * xStep, pad.top + ch - (ch * counts[i] / yMax));
+      ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }}
+
+    // Person lines
+    bkPeople.forEach((p, idx) => {{
+      if (!bkVis['p'+idx]) return;
+      const c = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p[personKey], c, 1.5); drawDots(p[personKey], c, 2);
+    }});
+
+    // Total line
+    if (bkVis.total) {{
+      const c = dataArr.map(d => d.count);
+      drawArea(c, '#3b82f6'); drawLine(c, '#3b82f6', 2.5); drawDots(c, '#3b82f6', 2.5);
+    }}
+
+    ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    const skip = skipMod || Math.max(1, Math.ceil(n / 20));
+    for (let i = 0; i < n; i++) {{
+      if (i % skip !== 0 && i !== n - 1) continue;
+      const x = pad.left + i * xStep;
+      const label = getLabelFn(dataArr[i], i);
+      ctx.save(); ctx.translate(x, H - pad.bottom + 14);
+      if (n > 20) ctx.rotate(-0.45);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }}
+
+    canvas.onmousemove = function(e) {{
+      const r2 = canvas.getBoundingClientRect();
+      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
+      const d = dataArr[ci];
+      let tip = getLabelFn(d, ci) + '\\n';
+      if (bkVis.total) tip += 'Total: ' + d.count + '\\n';
+      bkPeople.forEach((p, pi) => {{
+        if (bkVis['p'+pi] && p[personKey][ci] > 0) tip += p.name.split(' ')[0] + ': ' + p[personKey][ci] + '\\n';
+      }});
+      canvas.title = tip.trim();
+    }};
+  }};
+}}
+
+function buildBkLegend(legendId, redrawFns) {{
+  const el = document.getElementById(legendId);
+  if (!el) return;
+  el.innerHTML = '';
+  const mk = (lbl, col, key) => {{
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-total' + (bkVis[key] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{col}}"></span>${{lbl}}`;
+    item.onclick = () => {{ bkVis[key] = !bkVis[key]; rebuildBkLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }};
+  mk('Total', '#3b82f6', 'total');
+  bkPeople.forEach((p, i) => {{
+    if (p.total === 0) return;
+    const item = document.createElement('span');
+    const c = PERSON_COLORS[i % PERSON_COLORS.length];
+    item.className = 'legend-item legend-person' + (bkVis['p'+i] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{c}}"></span>${{p.name.split(' ')[0]}} (${{p.total}})`;
+    item.onclick = () => {{ bkVis['p'+i] = !bkVis['p'+i]; rebuildBkLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }});
+  const anyOn = bkPeople.some((_, i) => bkVis['p'+i]);
+  const tog = document.createElement('span');
+  tog.className = 'legend-item'; tog.style.cssText = 'color:var(--accent);font-weight:500';
+  tog.textContent = anyOn ? 'Hide All' : 'Show All';
+  tog.onclick = () => {{
+    const v = !anyOn; bkPeople.forEach((_, i) => {{ bkVis['p'+i] = v; }});
+    rebuildBkLegends(); redrawFns.forEach(f => f());
+  }};
+  el.appendChild(tog);
+}}
+
+const _drawBkDaily = bkChartEngine('bkDailyChart', bkDaily, 'daily',
+  (d) => d.date + ' ' + d.dow, 0);
+const _drawBkWeekly = bkChartEngine('bkWeeklyChart', bkWeekly, 'weekly',
+  (d) => 'Wk ' + d.week, 1);
+
+window.drawBkDailyChart = _drawBkDaily || (() => {{}});
+window.drawBkWeeklyChart = _drawBkWeekly || (() => {{}});
+
+const _allBkRedraw = [window.drawBkDailyChart, window.drawBkWeeklyChart];
+function rebuildBkLegends() {{
+  buildBkLegend('bkDailyLegend', _allBkRedraw);
+  buildBkLegend('bkWeeklyLegend', _allBkRedraw);
+}}
+rebuildBkLegends();
+
+window.addEventListener('resize', () => {{
+  const bkTab = document.getElementById('subtab-dri-bankruptcy');
+  if (bkTab && bkTab.classList.contains('active') && document.getElementById('tab-dri').classList.contains('active')) {{
+    window.drawBkDailyChart(); window.drawBkWeeklyChart();
+  }}
+}});
+
+// === BK Time Spent Table (current month daily) ===
+(function() {{
+  const CASES_PER_HOUR = 8;
+  if (bkDaily.length === 0) return;
+
+  function fmtTime(cases) {{
+    if (cases === 0) return {{ text: '--', cls: 'zero' }};
+    const hrs = cases / CASES_PER_HOUR;
+    const h = Math.floor(hrs);
+    const m = Math.round((hrs - h) * 60);
+    const text = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
+    let cls = 'light';
+    if (hrs >= 8) cls = 'over';
+    else if (hrs >= 6) cls = 'heavy';
+    else if (hrs >= 3) cls = 'medium';
+    else if (hrs >= 1) cls = 'light';
+    return {{ text: text.trim(), cls }};
+  }}
+
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const dayIndices = [];
+  const dayMeta = [];
+  bkDaily.forEach((d, idx) => {{
+    if (!d.key.startsWith(curPrefix)) return;
+    if (d.dow === 'Sat' || d.dow === 'Sun') return;
+    dayIndices.push(idx);
+    dayMeta.push(d);
+  }});
+  if (dayIndices.length === 0) return;
+
+  const thead = document.getElementById('bkTimeHead');
+  let hrow = '<tr><th>Name</th>';
+  dayMeta.forEach(d => {{
+    hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
+  }});
+  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  thead.innerHTML = hrow;
+
+  const tbody = document.getElementById('bkTimeBody');
+  let bodyHtml = '';
+  const colTotals = new Array(dayIndices.length).fill(0);
+
+  bkPeople.forEach(p => {{
+    let monthTotal = 0; let workDays = 0;
+    let row = '<tr><td>' + p.name + '</td>';
+    dayIndices.forEach((di, ci) => {{
+      const c = p.daily[di];
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      monthTotal += c; if (c > 0) workDays++;
+    }});
+    const totalT = fmtTime(monthTotal);
+    row += '<td class="time-total">' + totalT.text + '</td>';
+    const avgC = workDays > 0 ? Math.round(monthTotal / workDays) : 0;
+    row += '<td class="time-avg">' + fmtTime(avgC).text + '</td></tr>';
+    bodyHtml += row;
+  }});
+  tbody.innerHTML = bodyHtml;
+
+  const tfoot = document.getElementById('bkTimeFoot');
+  let frow = '<tr><td>Team Total</td>';
+  dayIndices.forEach((_, ci) => {{
+    const t = fmtTime(colTotals[ci]);
+    frow += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+  }});
+  const gt = colTotals.reduce((a, b) => a + b, 0);
+  const wd = colTotals.filter(c => c > 0).length || 1;
+  frow += '<td class="time-total">' + fmtTime(gt).text + '</td>';
+  frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
+  frow += '</tr>';
+  tfoot.innerHTML = frow;
+}})();
+
+// === BK Daily Leaderboard (today) ===
+(function() {{
+  const tbody = document.querySelector('#bkDailyLB tbody');
+  if (!tbody || bkDaily.length === 0) return;
+  const todayIdx = bkDaily.length - 1;
+  const todayData = bkPeople.map(p => ({{ name: p.name, count: p.daily[todayIdx] || 0 }}));
+  todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  todayData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// === BK Monthly Leaderboard (current month) ===
+(function() {{
+  const tbody = document.querySelector('#bkMonthlyLB tbody');
+  if (!tbody || bkDaily.length === 0) return;
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthIndices = [];
+  bkDaily.forEach((d, idx) => {{ if (d.key.startsWith(curPrefix)) monthIndices.push(idx); }});
+
+  const monthData = bkPeople.map(p => {{
+    let sum = 0;
+    monthIndices.forEach(idx => {{ sum += p.daily[idx] || 0; }});
+    return {{ name: p.name, count: sum }};
+  }});
+  monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  monthData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// ============================================================
+// === Evasion Cases Tab — ML Evasion (Snowflake data) ===
+// ============================================================
+const mlDaily = {ml_daily_json};
+const mlWeekly = {ml_weekly_json};
+const mlMonthly = {ml_monthly_json};
+const mlQueues = {ml_queues_json};
+const mlPeople = {ml_people_json};
+
+const ML_QUEUE_COLORS = {{ P1: '#3b82f6', P2: '#f59e0b', P3: '#ef4444', NMI: '#8b5cf6', 'MCA P1': '#06b6d4', 'MCA P2': '#ec4899' }};
+
+// Shared visibility for ML charts (total + queues + people)
+const mlVis = {{ total: true }};
+mlQueues.forEach(q => {{ mlVis[q] = false; }});
+mlPeople.forEach((_, i) => {{ mlVis['p' + i] = false; }});
+
+function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  return function draw() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = {{ top: 24, right: 20, bottom: 48, left: 50 }};
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = dataArr.length;
+    if (n < 1) return;
+
+    let maxVal = 1;
+    if (mlVis.total) maxVal = Math.max(maxVal, ...dataArr.map(d => d.count));
+    mlQueues.forEach(q => {{
+      if (mlVis[q]) maxVal = Math.max(maxVal, ...dataArr.map(d => d[q] || 0));
+    }});
+    mlPeople.forEach((p, i) => {{
+      if (mlVis['p'+i]) maxVal = Math.max(maxVal, ...p[personKey]);
+    }});
+    const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {{
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }}
+
+    const xStep = n > 1 ? cw / (n - 1) : cw;
+    function drawLine(counts, color, w) {{
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }}
+      ctx.stroke();
+    }}
+    function drawDots(counts, color, r) {{
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }}
+    }}
+    function drawArea(counts, color) {{
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, color + '22'); grad.addColorStop(1, color + '02');
+      ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) ctx.lineTo(pad.left + i * xStep, pad.top + ch - (ch * counts[i] / yMax));
+      ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }}
+
+    // Person lines
+    mlPeople.forEach((p, idx) => {{
+      if (!mlVis['p'+idx]) return;
+      const c = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p[personKey], c, 1.5); drawDots(p[personKey], c, 2);
+    }});
+
+    // Queue lines
+    mlQueues.forEach(q => {{
+      if (!mlVis[q]) return;
+      const c = ML_QUEUE_COLORS[q] || '#666';
+      const counts = dataArr.map(d => d[q] || 0);
+      drawLine(counts, c, 1.5); drawDots(counts, c, 2);
+    }});
+
+    // Total line
+    if (mlVis.total) {{
+      const c = dataArr.map(d => d.count);
+      drawArea(c, '#3b82f6'); drawLine(c, '#3b82f6', 2.5); drawDots(c, '#3b82f6', 2.5);
+    }}
+
+    ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    const skip = skipMod || Math.max(1, Math.ceil(n / 20));
+    for (let i = 0; i < n; i++) {{
+      if (i % skip !== 0 && i !== n - 1) continue;
+      const x = pad.left + i * xStep;
+      const label = getLabelFn(dataArr[i], i);
+      ctx.save(); ctx.translate(x, H - pad.bottom + 14);
+      if (n > 20) ctx.rotate(-0.45);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }}
+
+    canvas.onmousemove = function(e) {{
+      const r2 = canvas.getBoundingClientRect();
+      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
+      const d = dataArr[ci];
+      let tip = getLabelFn(d, ci) + '\\n';
+      if (mlVis.total) tip += 'Total: ' + d.count + '\\n';
+      mlQueues.forEach(q => {{
+        if (mlVis[q] && (d[q] || 0) > 0) tip += q + ': ' + d[q] + '\\n';
+      }});
+      mlPeople.forEach((p, pi) => {{
+        if (mlVis['p'+pi] && p[personKey][ci] > 0) tip += p.name.split(' ')[0] + ': ' + p[personKey][ci] + '\\n';
+      }});
+      canvas.title = tip.trim();
+    }};
+  }};
+}}
+
+function buildMlLegend(legendId, redrawFns) {{
+  const el = document.getElementById(legendId);
+  if (!el) return;
+  el.innerHTML = '';
+  const mk = (lbl, col, key) => {{
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-total' + (mlVis[key] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{col}}"></span>${{lbl}}`;
+    item.onclick = () => {{ mlVis[key] = !mlVis[key]; rebuildMlLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }};
+  mk('Total', '#3b82f6', 'total');
+  mlQueues.forEach(q => {{ mk(q, ML_QUEUE_COLORS[q] || '#666', q); }});
+  // Per-person toggles
+  mlPeople.forEach((p, i) => {{
+    if (p.total === 0) return;
+    const c = PERSON_COLORS[i % PERSON_COLORS.length];
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-person' + (mlVis['p'+i] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{c}}"></span>${{p.name.split(' ')[0]}} (${{p.total}})`;
+    item.onclick = () => {{ mlVis['p'+i] = !mlVis['p'+i]; rebuildMlLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }});
+  const anyOn = mlPeople.some((_, i) => mlVis['p'+i]);
+  const tog = document.createElement('span');
+  tog.className = 'legend-item'; tog.style.cssText = 'color:var(--accent);font-weight:500';
+  tog.textContent = anyOn ? 'Hide All' : 'Show All';
+  tog.onclick = () => {{
+    const v = !anyOn; mlPeople.forEach((_, i) => {{ mlVis['p'+i] = v; }});
+    rebuildMlLegends(); redrawFns.forEach(f => f());
+  }};
+  el.appendChild(tog);
+}}
+
+const _drawMlDaily = mlChartEngine('mlDailyChart', mlDaily, 'daily',
+  (d) => d.date + ' ' + d.dow, 0);
+const _drawMlWeekly = mlChartEngine('mlWeeklyChart', mlWeekly, 'weekly',
+  (d) => 'Wk ' + d.week, 1);
+
+window.drawMlDailyChart = _drawMlDaily || (() => {{}});
+window.drawMlWeeklyChart = _drawMlWeekly || (() => {{}});
+
+const _allMlRedraw = [window.drawMlDailyChart, window.drawMlWeeklyChart];
+function rebuildMlLegends() {{
+  buildMlLegend('mlDailyLegend', _allMlRedraw);
+  buildMlLegend('mlWeeklyLegend', _allMlRedraw);
+}}
+rebuildMlLegends();
+
+// ML Monthly Stacked Bar Chart (queue breakdown)
+(function() {{
+  const canvas = document.getElementById('mlQueueChart');
+  if (!canvas || !mlMonthly.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  window.drawMlQueueChart = function() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 300;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = {{ top: 24, right: 20, bottom: 48, left: 55 }};
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = mlMonthly.length;
+    if (n < 1) return;
+
+    const maxVal = Math.max(1, ...mlMonthly.map(d => d.total));
+    const yMax = Math.ceil(maxVal / 200) * 200 || 200;
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {{
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }}
+
+    const barW = Math.min(50, (cw / n) * 0.6);
+    const gap = cw / n;
+
+    mlMonthly.forEach((d, i) => {{
+      const x = pad.left + i * gap + (gap - barW) / 2;
+      let yOff = 0;
+      mlQueues.forEach(q => {{
+        const val = d[q] || 0;
+        const bh = (val / yMax) * ch;
+        const y = pad.top + ch - yOff - bh;
+        ctx.fillStyle = ML_QUEUE_COLORS[q] || '#666';
+        ctx.fillRect(x, y, barW, bh);
+        yOff += bh;
+      }});
+      ctx.fillStyle = '#e4e4e7'; ctx.font = 'bold 10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+      const topY = pad.top + ch - (d.total / yMax) * ch;
+      ctx.fillText(d.total, x + barW / 2, topY - 5);
+      ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif';
+      ctx.fillText(d.month, x + barW / 2, H - pad.bottom + 16);
+    }});
+
+    // Legend
+    ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'left';
+    let lx = pad.left;
+    mlQueues.forEach(q => {{
+      ctx.fillStyle = ML_QUEUE_COLORS[q] || '#666';
+      ctx.fillRect(lx, pad.top - 16, 10, 10);
+      ctx.fillStyle = '#a1a1aa';
+      ctx.fillText(q, lx + 14, pad.top - 7);
+      lx += ctx.measureText(q).width + 28;
+    }});
+
+    canvas.onmousemove = function(e) {{
+      const r = canvas.getBoundingClientRect();
+      const mx = e.clientX - r.left;
+      const idx = Math.floor((mx - pad.left) / gap);
+      if (idx < 0 || idx >= n) {{ canvas.title = ''; return; }}
+      const d = mlMonthly[idx];
+      let tip = d.month + '\\nTotal: ' + d.total + '\\n';
+      mlQueues.forEach(q => {{ if (d[q]) tip += q + ': ' + d[q] + '\\n'; }});
+      canvas.title = tip.trim();
+    }};
+  }};
+  drawMlQueueChart();
+}})();
+
+// ============================================================
+// === Evasion Cases Tab — Cap-Evasion Manual Reviews ===
+// ============================================================
+const evDaily = {ev_daily_json};
+const evWeekly = {ev_weekly_json};
+const evPeople = {ev_people_json};
+const evBreakdown = {ev_breakdown_json};
+
+// Shared visibility state for evasion charts
+const evVis = {{ 'total': true, 'actioned': true }};
+evPeople.forEach((_, i) => {{ evVis['p' + i] = false; }});
+
+// Reuse driChartEngine pattern for evasion charts
+function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  return function draw() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = {{ top: 24, right: 20, bottom: 48, left: 50 }};
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = dataArr.length;
+    if (n < 1) return;
+
+    let maxVal = 1;
+    if (evVis.total) maxVal = Math.max(maxVal, ...dataArr.map(d => d.total));
+    if (evVis.actioned) maxVal = Math.max(maxVal, ...dataArr.map(d => d.count));
+    evPeople.forEach((p, i) => {{
+      if (evVis['p'+i]) maxVal = Math.max(maxVal, ...p[personKey]);
+    }});
+    const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {{
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }}
+
+    const xStep = n > 1 ? cw / (n - 1) : cw;
+    function drawLine(counts, color, w, dashed) {{
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dashed || []);
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }}
+      ctx.stroke(); ctx.setLineDash([]);
+    }}
+    function drawDots(counts, color, r) {{
+      for (let i = 0; i < n; i++) {{
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }}
+    }}
+    function drawArea(counts, color) {{
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, color + '22'); grad.addColorStop(1, color + '02');
+      ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) ctx.lineTo(pad.left + i * xStep, pad.top + ch - (ch * counts[i] / yMax));
+      ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }}
+
+    evPeople.forEach((p, idx) => {{
+      if (!evVis['p'+idx]) return;
+      const c = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p[personKey], c, 1.5); drawDots(p[personKey], c, 2);
+    }});
+
+    if (evVis.total) {{
+      const c = dataArr.map(d => d.total);
+      drawArea(c, '#8b5cf6'); drawLine(c, '#8b5cf6', 2); drawDots(c, '#8b5cf6', 2.5);
+    }}
+    if (evVis.actioned) {{
+      const c = dataArr.map(d => d.count);
+      drawArea(c, '#22c55e'); drawLine(c, '#22c55e', 2.5); drawDots(c, '#22c55e', 2.5);
+    }}
+
+    ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    const skip = skipMod || Math.max(1, Math.ceil(n / 20));
+    for (let i = 0; i < n; i++) {{
+      if (i % skip !== 0 && i !== n - 1) continue;
+      const x = pad.left + i * xStep;
+      const label = getLabelFn(dataArr[i], i);
+      ctx.save(); ctx.translate(x, H - pad.bottom + 14);
+      if (n > 20) ctx.rotate(-0.45);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }}
+
+    canvas.onmousemove = function(e) {{
+      const r2 = canvas.getBoundingClientRect();
+      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
+      const d = dataArr[ci];
+      let tip = getLabelFn(d, ci) + '\\n';
+      if (evVis.total) tip += 'Total Reviews: ' + d.total + '\\n';
+      if (evVis.actioned) tip += 'Actioned: ' + d.count + '\\n';
+      evPeople.forEach((p, pi) => {{
+        if (evVis['p'+pi] && p[personKey][ci] > 0) tip += p.name.split(' ')[0] + ': ' + p[personKey][ci] + '\\n';
+      }});
+      canvas.title = tip.trim();
+    }};
+  }};
+}}
+
+function buildEvLegend(legendId, redrawFns) {{
+  const el = document.getElementById(legendId);
+  if (!el) return;
+  el.innerHTML = '';
+  const mk = (lbl, col, key) => {{
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-total' + (evVis[key] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{col}}"></span>${{lbl}}`;
+    item.onclick = () => {{ evVis[key] = !evVis[key]; rebuildEvLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }};
+  mk('Total Reviews', '#8b5cf6', 'total'); mk('Actioned (SBI + Linked)', '#22c55e', 'actioned');
+  evPeople.forEach((p, i) => {{
+    if (p.total === 0) return;
+    const item = document.createElement('span');
+    const c = PERSON_COLORS[i % PERSON_COLORS.length];
+    item.className = 'legend-item legend-person' + (evVis['p'+i] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${{c}}"></span>${{p.name.split(' ')[0]}} (${{p.total}})`;
+    item.onclick = () => {{ evVis['p'+i] = !evVis['p'+i]; rebuildEvLegends(); redrawFns.forEach(f => f()); }};
+    el.appendChild(item);
+  }});
+  const anyOn = evPeople.some((_, i) => evVis['p'+i]);
+  const tog = document.createElement('span');
+  tog.className = 'legend-item'; tog.style.cssText = 'color:var(--accent);font-weight:500';
+  tog.textContent = anyOn ? 'Hide All' : 'Show All';
+  tog.onclick = () => {{
+    const v = !anyOn; evPeople.forEach((_, i) => {{ evVis['p'+i] = v; }});
+    rebuildEvLegends(); redrawFns.forEach(f => f());
+  }};
+  el.appendChild(tog);
+}}
+
+const _drawEvDaily = evChartEngine('evDailyChart', evDaily, 'daily',
+  (d) => d.date + ' ' + d.dow, 0);
+const _drawEvWeekly = evChartEngine('evWeeklyChart', evWeekly, 'weekly',
+  (d) => 'Wk ' + d.week, 1);
+
+window.drawEvDailyChart = _drawEvDaily || (() => {{}});
+window.drawEvWeeklyChart = _drawEvWeekly || (() => {{}});
+
+const _allEvRedraw = [window.drawEvDailyChart, window.drawEvWeeklyChart];
+function rebuildEvLegends() {{
+  buildEvLegend('evDailyLegend', _allEvRedraw);
+  buildEvLegend('evWeeklyLegend', _allEvRedraw);
+}}
+rebuildEvLegends();
+
+window.addEventListener('resize', () => {{
+  if (document.getElementById('tab-evasion').classList.contains('active')) {{
+    if (typeof drawMlDailyChart === 'function') drawMlDailyChart();
+    if (typeof drawMlWeeklyChart === 'function') drawMlWeeklyChart();
+    if (typeof drawMlQueueChart === 'function') drawMlQueueChart();
+    window.drawEvDailyChart(); window.drawEvWeeklyChart();
+    if (typeof drawEvBreakdown === 'function') drawEvBreakdown();
+  }}
+}});
+
+// === Evasion Action Breakdown Chart (horizontal bar) ===
+(function() {{
+  const canvas = document.getElementById('evBreakdownChart');
+  const legendEl = document.getElementById('evBreakdownLegend');
+  if (!canvas || !evBreakdown.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  const BAR_COLORS = ['#22c55e','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1','#14b8a6','#84cc16','#fb923c','#e879f9','#a3e635','#facc15'];
+
+  window.drawEvBreakdown = function() {{
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = Math.min(rect.width - 220, 500); const H = 220;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const maxVal = Math.max(1, ...evBreakdown.map(d => d.count));
+    const barH = Math.min(22, (H - 10) / evBreakdown.length - 4);
+    const labelW = 10;
+    const barAreaW = W - labelW - 50;
+
+    let legendHtml = '';
+    evBreakdown.forEach((d, i) => {{
+      const y = 5 + i * (barH + 4);
+      const bw = (d.count / maxVal) * barAreaW;
+      const color = BAR_COLORS[i % BAR_COLORS.length];
+
+      ctx.fillStyle = color + '33';
+      ctx.fillRect(labelW, y, barAreaW, barH);
+      ctx.fillStyle = color;
+      ctx.fillRect(labelW, y, bw, barH);
+
+      ctx.fillStyle = '#e4e4e7';
+      ctx.font = '11px -apple-system, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(d.count, labelW + bw + 6, y + barH - 5);
+
+      legendHtml += `<div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${{color}}"></span>${{d.action}} (${{d.count}})</div>`;
+    }});
+    legendEl.innerHTML = legendHtml;
+  }};
+  drawEvBreakdown();
+}})();
+
+// === Combined Evasion Time Spent Table (ML per-person + Manual per-person, current month daily) ===
+(function() {{
+  const CASES_PER_HOUR = 8;
+  if (evDaily.length === 0 && mlDaily.length === 0) return;
+
+  function fmtTime(cases) {{
+    if (cases === 0) return {{ text: '--', cls: 'zero' }};
+    const hrs = cases / CASES_PER_HOUR;
+    const h = Math.floor(hrs);
+    const m = Math.round((hrs - h) * 60);
+    const text = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
+    let cls = 'light';
+    if (hrs >= 8) cls = 'over';
+    else if (hrs >= 6) cls = 'heavy';
+    else if (hrs >= 3) cls = 'medium';
+    else if (hrs >= 1) cls = 'light';
+    return {{ text: text.trim(), cls }};
+  }}
+
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+  // Use evDaily (or mlDaily) as date skeleton
+  const refDaily = evDaily.length > 0 ? evDaily : mlDaily;
+  const dayIndices = [];
+  const dayMeta = [];
+  refDaily.forEach((d, idx) => {{
+    if (!d.key.startsWith(curPrefix)) return;
+    if (d.dow === 'Sat' || d.dow === 'Sun') return;
+    dayIndices.push(idx);
+    dayMeta.push(d);
+  }});
+  if (dayIndices.length === 0) return;
+
+  // Build ML daily lookup by date key for per-person
+  const mlDayKeyToIdx = {{}};
+  mlDaily.forEach((d, idx) => {{ mlDayKeyToIdx[d.key] = idx; }});
+
+  const thead = document.getElementById('evTimeHead');
+  let hrow = '<tr><th>Name</th>';
+  dayMeta.forEach(d => {{
+    hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
+  }});
+  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  thead.innerHTML = hrow;
+
+  const tbody = document.getElementById('evTimeBody');
+  let bodyHtml = '';
+  const colTotals = new Array(dayIndices.length).fill(0);
+
+  // ML per-person rows
+  bodyHtml += '<tr><td colspan="' + (dayIndices.length + 3) + '" style="background:#1e2030;color:#3b82f6;font-weight:600;font-size:12px;padding:6px 10px">ML Evasion Cases</td></tr>';
+  mlPeople.forEach(p => {{
+    if (p.total === 0) return;
+    let monthTotal = 0; let workDays = 0;
+    let row = '<tr><td>' + p.name + '</td>';
+    dayIndices.forEach((_, ci) => {{
+      const dateKey = dayMeta[ci].key;
+      const mlIdx = mlDayKeyToIdx[dateKey];
+      const c = mlIdx !== undefined ? (p.daily[mlIdx] || 0) : 0;
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      monthTotal += c; if (c > 0) workDays++;
+    }});
+    const totalT = fmtTime(monthTotal);
+    row += '<td class="time-total">' + totalT.text + '</td>';
+    const avgC = workDays > 0 ? Math.round(monthTotal / workDays) : 0;
+    row += '<td class="time-avg">' + fmtTime(avgC).text + '</td></tr>';
+    bodyHtml += row;
+  }});
+
+  // Cap-Evasion per-person rows
+  bodyHtml += '<tr><td colspan="' + (dayIndices.length + 3) + '" style="background:#1e2030;color:#22c55e;font-weight:600;font-size:12px;padding:6px 10px">Cap-Evasion Manual Reviews</td></tr>';
+  evPeople.forEach(p => {{
+    let monthTotal = 0; let workDays = 0;
+    let row = '<tr><td>' + p.name + '</td>';
+    dayIndices.forEach((di, ci) => {{
+      const c = p.daily[di] || 0;
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      monthTotal += c; if (c > 0) workDays++;
+    }});
+    const totalT = fmtTime(monthTotal);
+    row += '<td class="time-total">' + totalT.text + '</td>';
+    const avgC = workDays > 0 ? Math.round(monthTotal / workDays) : 0;
+    row += '<td class="time-avg">' + fmtTime(avgC).text + '</td></tr>';
+    bodyHtml += row;
+  }});
+
+  tbody.innerHTML = bodyHtml;
+
+  // Footer: combined totals per day
+  const tfoot = document.getElementById('evTimeFoot');
+  let frow = '<tr><td><strong>Combined Total</strong></td>';
+  dayIndices.forEach((_, ci) => {{
+    const t = fmtTime(colTotals[ci]);
+    frow += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+  }});
+  const gt = colTotals.reduce((a, b) => a + b, 0);
+  const wd = colTotals.filter(c => c > 0).length || 1;
+  frow += '<td class="time-total">' + fmtTime(gt).text + '</td>';
+  frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
+  frow += '</tr>';
+  tfoot.innerHTML = frow;
+}})();
+
+// === ML Daily Leaderboard (today) ===
+(function() {{
+  const tbody = document.querySelector('#mlDailyLB tbody');
+  if (!tbody || mlDaily.length === 0 || mlPeople.length === 0) return;
+  const todayIdx = mlDaily.length - 1;
+  const todayData = mlPeople.map(p => ({{ name: p.name, count: p.daily[todayIdx] || 0 }}));
+  todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  todayData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// === ML Monthly Leaderboard (current month) ===
+(function() {{
+  const tbody = document.querySelector('#mlMonthlyLB tbody');
+  if (!tbody || mlDaily.length === 0 || mlPeople.length === 0) return;
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthIndices = [];
+  mlDaily.forEach((d, idx) => {{ if (d.key.startsWith(curPrefix)) monthIndices.push(idx); }});
+
+  const monthData = mlPeople.map(p => {{
+    let sum = 0;
+    monthIndices.forEach(idx => {{ sum += p.daily[idx] || 0; }});
+    return {{ name: p.name, count: sum }};
+  }});
+  monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  monthData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// === Evasion Daily Leaderboard (today) ===
+(function() {{
+  const tbody = document.querySelector('#evDailyLB tbody');
+  if (!tbody || evDaily.length === 0) return;
+  const todayIdx = evDaily.length - 1;
+  const todayData = evPeople.map(p => ({{ name: p.name, count: p.daily[todayIdx] || 0 }}));
+  todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  todayData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+// === Evasion Monthly Leaderboard (current month) ===
+(function() {{
+  const tbody = document.querySelector('#evMonthlyLB tbody');
+  if (!tbody || evDaily.length === 0) return;
+  const now = new Date();
+  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const monthIndices = [];
+  evDaily.forEach((d, idx) => {{ if (d.key.startsWith(curPrefix)) monthIndices.push(idx); }});
+
+  const monthData = evPeople.map(p => {{
+    let sum = 0;
+    monthIndices.forEach(idx => {{ sum += p.daily[idx] || 0; }});
+    return {{ name: p.name, count: sum }};
+  }});
+  monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {{
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }}
+
+  let html = '';
+  monthData.forEach((p, i) => {{
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  }});
+  tbody.innerHTML = html;
+}})();
+
+function doRefresh(btn) {{
+  btn.classList.add('loading');
+  window.location.replace(window.location.origin + '/?force');
+}}
+
+// Auto-refresh every 30 minutes
+setInterval(function() {{
+  window.location.replace(window.location.origin + '/?force');
+}}, 30 * 60 * 1000);
+
+</script>
+</body>
+</html>"""
+
+
+class DashboardHandler(http.server.BaseHTTPRequestHandler):
+    html_cache = ""
+    last_fetch = 0
+    dri_cache = None
+    dri_last_fetch = 0
+    evasion_cache = None
+    evasion_last_fetch = 0
+    bk_cache = None
+    bk_last_fetch = 0
+
+    def do_GET(self):
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        force = "force" in parse_qs(parsed_url.query)
+
+        if path == "/" or path == "/index.html":
+            now = time.time()
+
+            if force:
+                DashboardHandler.last_fetch = 0
+                DashboardHandler.dri_last_fetch = 0
+                DashboardHandler.evasion_last_fetch = 0
+                DashboardHandler.bk_last_fetch = 0
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Force refresh requested")
+
+            # Fetch DRI data (less frequently — every 30 min)
+            if now - DashboardHandler.dri_last_fetch > DRI_CACHE_SEC or DashboardHandler.dri_cache is None:
+                try:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching DRI data from Google Sheets...")
+                    rows = fetch_dri_data()
+                    if rows:
+                        DashboardHandler.dri_cache = parse_dri_data(rows)
+                        DashboardHandler.dri_last_fetch = now
+                        dr = DashboardHandler.dri_cache
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] DRI: {dr['totalResolved']} resolved, {dr['totalSubmitted']} submitted, {len(dr['daily'])} days, {len(dr['weekly'])} weeks")
+                except Exception as e:
+                    print(f"Error fetching DRI data: {e}")
+
+            # Fetch Evasion data (every 30 min)
+            if now - DashboardHandler.evasion_last_fetch > EVASION_CACHE_SEC or DashboardHandler.evasion_cache is None:
+                try:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching Evasion data from Google Sheets...")
+                    rows = fetch_evasion_data()
+                    if rows:
+                        DashboardHandler.evasion_cache = parse_evasion_data(rows)
+                        DashboardHandler.evasion_last_fetch = now
+                        ev = DashboardHandler.evasion_cache
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] Evasion: {ev['totalActioned']} actioned, {ev['totalReviews']} reviews, {len(ev['daily'])} days")
+                except Exception as e:
+                    print(f"Error fetching Evasion data: {e}")
+
+            # Fetch Bankruptcy data (every 30 min)
+            if now - DashboardHandler.bk_last_fetch > BK_CACHE_SEC or DashboardHandler.bk_cache is None:
+                try:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching Bankruptcy data from Google Sheets...")
+                    rows = fetch_bk_data()
+                    if rows:
+                        DashboardHandler.bk_cache = parse_bk_data(rows)
+                        DashboardHandler.bk_last_fetch = now
+                        bk = DashboardHandler.bk_cache
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] BK: {bk['totalReceived']} received, {bk['activeWorkers']} workers, {len(bk['daily'])} days")
+                except Exception as e:
+                    print(f"Error fetching Bankruptcy data: {e}")
+
+            if now - DashboardHandler.last_fetch > REFRESH_INTERVAL_SEC or not DashboardHandler.html_cache:
+                try:
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching report data from Salesforce...")
+                    token, instance = get_sf_auth()
+
+                    # Fetch today's data (default report filter)
+                    raw_today = fetch_report(token, instance)
+                    parsed = parse_report(raw_today)
+
+                    # Fetch monthly data for line chart
+                    monthly_filter = {
+                        "column": "CLOSED_DATEONLY",
+                        "durationValue": "THIS_MONTH",
+                        "startDate": None,
+                        "endDate": None
+                    }
+                    raw_monthly = fetch_report(token, instance, date_filter=monthly_filter)
+                    monthly, people = parse_monthly(raw_monthly)
+
+                    # Fetch active queue counts
+                    queue = fetch_queue_counts(token, instance)
+
+                    # Fetch peak queue total (Post Origination Queues)
+                    peak = fetch_peak_queue_total(token, instance)
+
+                    DashboardHandler.html_cache = build_html(
+                        parsed, monthly, people, queue, peak,
+                        dri_data=DashboardHandler.dri_cache,
+                        evasion_data=DashboardHandler.evasion_cache,
+                        bk_data=DashboardHandler.bk_cache
+                    )
+                    DashboardHandler.last_fetch = now
+                    queue_total = sum(queue.values())
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetched {parsed['totalCases']} today, {sum(d['count'] for d in monthly)} this month, {queue_total} personal queue, {peak} total queue")
+                except Exception as e:
+                    print(f"Error fetching report: {e}")
+                    if not DashboardHandler.html_cache:
+                        DashboardHandler.html_cache = f"<html><body><h1>Error loading data</h1><pre>{e}</pre></body></html>"
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(DashboardHandler.html_cache.encode())
+        else:
+            self.send_error(404)
+
+    def log_message(self, format, *args):
+        pass  # suppress default request logging
+
+
+def main():
+    server = http.server.HTTPServer(("127.0.0.1", PORT), DashboardHandler)
+    print(f"Dashboard running at http://localhost:{PORT}")
+    print(f"Data re-fetches every {REFRESH_INTERVAL_SEC // 60} min (use Refresh button in browser)")
+    print("Press Ctrl+C to stop\n")
+    webbrowser.open(f"http://localhost:{PORT}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down.")
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
