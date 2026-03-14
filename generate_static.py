@@ -90,17 +90,42 @@ def make_static(html):
         html,
     )
 
-    # Replace LIVE indicator + refresh note with snapshot banner
+    # Replace the refresh button + update/auto-refresh text with a static snapshot banner
     html = re.sub(
-        r'<div class="live">LIVE</div>\s*'
-        r'<div style="margin-top:4px">Updated [^<]*</div>\s*'
-        r'<div>Refreshes every [^<]*</div>',
+        r'<button class="refresh-btn"[^>]*>.*?</button>\s*'
+        r'<div[^>]*>Updated [^<]*</div>\s*'
+        r'<div>[^<]*[Rr]efresh[^<]*</div>',
         f'<div style="color:var(--accent);font-weight:500">SNAPSHOT</div>\n'
         f'    <div style="margin-top:4px">Generated {timestamp}</div>',
         html,
+        flags=re.DOTALL,
     )
 
-    # Remove the .live CSS animation (no longer needed)
+    # Remove the doRefresh function and auto-refresh setInterval
+    html = re.sub(
+        r'function doRefresh\(btn\)\s*\{[^}]*\}\s*',
+        '',
+        html,
+    )
+    html = re.sub(
+        r'// Auto-refresh every.*?\n.*?setInterval\(function\(\)\s*\{[^}]*\},\s*\d+[^)]*\);\s*',
+        '',
+        html,
+    )
+
+    # Remove .refresh-btn CSS rules (all selectors containing "refresh-btn")
+    html = re.sub(
+        r'[^\n{]*\.refresh-btn[^\n{]*\{[^}]*\}\s*',
+        '',
+        html,
+    )
+    html = re.sub(
+        r'@keyframes spin\s*\{[^}]*\{[^}]*\}[^}]*\}',
+        '',
+        html,
+    )
+
+    # Remove the .live CSS animation (if present)
     html = re.sub(
         r'\.meta \.live\s*\{[^}]*\}\s*'
         r'\.meta \.live::before\s*\{[^}]*\}\s*'
