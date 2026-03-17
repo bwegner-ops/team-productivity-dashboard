@@ -184,9 +184,12 @@ def build_ml_evasion_data():
             entry[q] = month_queue[m].get(q, 0)
         monthly_by_queue.append(entry)
 
-    # Per-person data
+    # Per-person data (filtered to TEAM_MEMBERS only)
+    team_set = set(TEAM_MEMBERS)
     people_list = []
     for name, total in sorted(person_total.items(), key=lambda x: -x[1]):
+        if name not in team_set:
+            continue
         pd_weekly = defaultdict(int)
         for dk, cnt in person_date[name].items():
             dt2 = datetime.strptime(dk, "%Y-%m-%d")
@@ -454,9 +457,12 @@ def parse_evasion_data(rows):
         week_keys_ordered.append(wk)
         w += timedelta(days=7)
 
-    # Per-person data
+    # Per-person data (filtered to TEAM_MEMBERS only)
+    team_set = set(TEAM_MEMBERS)
     people_list = []
     for name, total in sorted(person_total.items(), key=lambda x: -x[1]):
+        if name not in team_set:
+            continue
         people_list.append({
             "name": name, "total": total,
             "daily": [person_daily[name].get(dd["key"], 0) for dd in all_dates],
@@ -1184,6 +1190,17 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
     width: 100% !important;
     height: 340px !important;
   }}
+  .chart-wrap {{ overflow: hidden; position: relative; }}
+  .zoom-hint {{
+    position: absolute;
+    bottom: 4px;
+    right: 8px;
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 1;
+  }}
   .legend {{
     display: flex;
     flex-wrap: wrap;
@@ -1488,6 +1505,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="monthlyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="chartLegend"></div>
 </div>
@@ -1583,6 +1601,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="driDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="driDailyLegend"></div>
 </div>
@@ -1594,6 +1613,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="driWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="driWeeklyLegend"></div>
 </div>
@@ -1680,6 +1700,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="bkDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="bkDailyLegend"></div>
 </div>
@@ -1691,6 +1712,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="bkWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="bkWeeklyLegend"></div>
 </div>
@@ -1736,15 +1758,14 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
 </div>
 
-<!-- Side-by-side grid: ML left, Cap-Evasion right -->
-<div class="evasion-grid">
-
-<!-- ---- LEFT COLUMN: ML Evasion Cases ---- -->
-<div>
-<div style="border-left:3px solid #3b82f6;padding-left:12px;margin-bottom:12px">
-  <h2 style="margin:0;font-size:16px;color:#3b82f6">ML Evasion Cases</h2>
-  <span style="font-size:11px;color:var(--muted)">Source: Snowflake &mdash; APP_CAPITAL.OPERATIONS_CASES_REPORTING</span>
+<!-- Sub-tab navigation -->
+<div class="subtabs">
+  <div class="subtab active" onclick="switchEvSubTab('ev-ml')">ML Evasion Cases</div>
+  <div class="subtab" onclick="switchEvSubTab('ev-manual')">Cap-Evasion Manual Reviews</div>
 </div>
+
+<!-- ---- Sub-tab 1: ML Evasion Cases ---- -->
+<div class="subtab-content active" id="subtab-ev-ml">
 
 <div class="evasion-lb-grid">
   <div class="section-card" style="margin-bottom:0">
@@ -1780,6 +1801,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="mlDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="mlDailyLegend"></div>
 </div>
@@ -1791,27 +1813,15 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="mlWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="mlWeeklyLegend"></div>
 </div>
 
-<div class="chart-card">
-  <div class="board-header">
-    <h2>ML Cases by Queue &mdash; Monthly</h2>
-    <span style="font-size:12px;color:var(--muted)">Stacked bar</span>
-  </div>
-  <div class="chart-wrap">
-    <canvas id="mlQueueChart"></canvas>
-  </div>
-</div>
-</div><!-- /left column -->
+</div><!-- /subtab-ev-ml -->
 
-<!-- ---- RIGHT COLUMN: Cap-Evasion Manual Reviews ---- -->
-<div>
-<div style="border-left:3px solid #22c55e;padding-left:12px;margin-bottom:12px">
-  <h2 style="margin:0;font-size:16px;color:#22c55e">Cap-Evasion Manual Reviews</h2>
-  <span style="font-size:11px;color:var(--muted)">Source: Google Sheets &mdash; #cap-evasion shift schedule</span>
-</div>
+<!-- ---- Sub-tab 2: Cap-Evasion Manual Reviews ---- -->
+<div class="subtab-content" id="subtab-ev-manual">
 
 <div class="evasion-lb-grid">
   <div class="section-card" style="margin-bottom:0">
@@ -1847,6 +1857,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="evDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="evDailyLegend"></div>
 </div>
@@ -1858,6 +1869,7 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
   </div>
   <div class="chart-wrap">
     <canvas id="evWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="evWeeklyLegend"></div>
 </div>
@@ -1872,9 +1884,8 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
     <div id="evBreakdownLegend" style="font-size:12px;line-height:1.8"></div>
   </div>
 </div>
-</div><!-- /right column -->
 
-</div><!-- /side-by-side grid -->
+</div><!-- /subtab-ev-manual -->
 
 <!-- ---- Full-width: Combined Estimated Time Spent ---- -->
 <div style="border-left:3px solid #f59e0b;padding-left:12px;margin:20px 0 8px">
@@ -1899,6 +1910,61 @@ def build_html(dashboard_data, monthly_data, people_data, queue_data=None, peak_
 </div><!-- /tab-evasion -->
 
 <script>
+// === Timeline Zoom & Pan ===
+const chartViewport = {{}};
+
+function makeTimeZoomable(canvas, drawFn) {{
+  const id = canvas.id;
+  chartViewport[id] = {{ start: 0, end: 1 }};
+
+  canvas.addEventListener('wheel', function(e) {{
+    e.preventDefault();
+    const vp = chartViewport[id];
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width;
+    const range = vp.end - vp.start;
+    const factor = e.deltaY > 0 ? 1.15 : 0.87;
+    const nr = Math.max(0.05, Math.min(1, range * factor));
+    const pivot = vp.start + mx * range;
+    let ns = pivot - mx * nr, ne = pivot + (1 - mx) * nr;
+    if (ns < 0) {{ ne -= ns; ns = 0; }}
+    if (ne > 1) {{ ns -= (ne - 1); ne = 1; }}
+    vp.start = Math.max(0, ns);
+    vp.end = Math.min(1, ne);
+    drawFn();
+  }}, {{ passive: false }});
+
+  let dragging = false, dragX, dragS, dragE;
+  canvas.addEventListener('mousedown', function(e) {{
+    const vp = chartViewport[id];
+    if (vp.end - vp.start >= 0.99) return;
+    dragging = true;
+    dragX = e.clientX;
+    dragS = vp.start; dragE = vp.end;
+    canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  }});
+  window.addEventListener('mousemove', function(e) {{
+    if (!dragging) return;
+    const vp = chartViewport[id];
+    const rect = canvas.getBoundingClientRect();
+    const dx = (e.clientX - dragX) / rect.width * (dragE - dragS);
+    let ns = dragS - dx, ne = dragE - dx;
+    if (ns < 0) {{ ne -= ns; ns = 0; }}
+    if (ne > 1) {{ ns -= (ne - 1); ne = 1; }}
+    vp.start = Math.max(0, ns);
+    vp.end = Math.min(1, ne);
+    drawFn();
+  }});
+  window.addEventListener('mouseup', function() {{
+    if (dragging) {{ dragging = false; canvas.style.cursor = ''; }}
+  }});
+  canvas.addEventListener('dblclick', function() {{
+    chartViewport[id] = {{ start: 0, end: 1 }};
+    drawFn();
+  }});
+}}
+
 // === Tab Switching ===
 function switchTab(id) {{
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -1917,25 +1983,20 @@ function switchTab(id) {{
     redrawActiveSubTab();
   }}
   if (id === 'evasion') {{
-    if (typeof drawMlDailyChart === 'function') setTimeout(drawMlDailyChart, 50);
-    if (typeof drawMlWeeklyChart === 'function') setTimeout(drawMlWeeklyChart, 60);
-    if (typeof drawMlQueueChart === 'function') setTimeout(drawMlQueueChart, 70);
-    if (typeof drawEvDailyChart === 'function') setTimeout(drawEvDailyChart, 80);
-    if (typeof drawEvWeeklyChart === 'function') setTimeout(drawEvWeeklyChart, 100);
-    if (typeof drawEvBreakdown === 'function') setTimeout(drawEvBreakdown, 120);
+    setTimeout(redrawActiveEvSubTab, 50);
   }}
 }}
 
 // === Sub-tab Switching (within DRI Work) ===
 function switchSubTab(id) {{
-  document.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
+  const tab = document.getElementById('tab-dri');
+  tab.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
+  tab.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
   document.getElementById('subtab-' + id).classList.add('active');
   const subLabels = {{ 'dri-collections': 'SFS-Collections', 'dri-bankruptcy': 'Bankruptcy Cases' }};
-  document.querySelectorAll('.subtab').forEach(el => {{
+  tab.querySelectorAll('.subtab').forEach(el => {{
     if (el.textContent === subLabels[id]) el.classList.add('active');
   }});
-  // Redraw charts for the activated sub-tab
   setTimeout(redrawActiveSubTab, 50);
 }}
 
@@ -1949,6 +2010,33 @@ function redrawActiveSubTab() {{
   if (bkActive && bkActive.classList.contains('active')) {{
     if (typeof drawBkDailyChart === 'function') setTimeout(drawBkDailyChart, 50);
     if (typeof drawBkWeeklyChart === 'function') setTimeout(drawBkWeeklyChart, 80);
+  }}
+}}
+
+// === Sub-tab Switching (within Evasion Cases) ===
+function switchEvSubTab(id) {{
+  const tab = document.getElementById('tab-evasion');
+  tab.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
+  tab.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
+  document.getElementById('subtab-' + id).classList.add('active');
+  const subLabels = {{ 'ev-ml': 'ML Evasion Cases', 'ev-manual': 'Cap-Evasion Manual Reviews' }};
+  tab.querySelectorAll('.subtab').forEach(el => {{
+    if (el.textContent === subLabels[id]) el.classList.add('active');
+  }});
+  setTimeout(redrawActiveEvSubTab, 50);
+}}
+
+function redrawActiveEvSubTab() {{
+  const mlActive = document.getElementById('subtab-ev-ml');
+  const evActive = document.getElementById('subtab-ev-manual');
+  if (mlActive && mlActive.classList.contains('active')) {{
+    if (typeof drawMlDailyChart === 'function') setTimeout(drawMlDailyChart, 50);
+    if (typeof drawMlWeeklyChart === 'function') setTimeout(drawMlWeeklyChart, 60);
+  }}
+  if (evActive && evActive.classList.contains('active')) {{
+    if (typeof drawEvDailyChart === 'function') setTimeout(drawEvDailyChart, 50);
+    if (typeof drawEvWeeklyChart === 'function') setTimeout(drawEvWeeklyChart, 60);
+    if (typeof drawEvBreakdown === 'function') setTimeout(drawEvBreakdown, 80);
   }}
 }}
 
@@ -2053,7 +2141,10 @@ function buildLegend() {{
       ctx.fillText(val, pad.left - 8, y + 4);
     }}
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport['monthlyChart'] || {{start:0,end:1}};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
 
     // Helper: draw a line series
     function drawLine(counts, color, width, dashed) {{
@@ -2102,6 +2193,11 @@ function buildLegend() {{
       ctx.textAlign = 'right';
       ctx.fillText('Queue: ' + peakQueueTotal, W - pad.right, peakY - 5);
     }}
+
+    // Clip to chart area for zoom/pan
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
 
     // Draw individual person lines first (behind total)
     peopleData.forEach((p, idx) => {{
@@ -2171,11 +2267,13 @@ function buildLegend() {{
       ctx.fillText(monthlyData[i].dow, x, H - pad.bottom + 28);
     }}
 
+    ctx.restore(); // end zoom clip
+
     // Tooltip on hover - show values for all visible series
     canvas.onmousemove = function(e) {{
       const rect2 = canvas.getBoundingClientRect();
       const mx = e.clientX - rect2.left;
-      const closestIdx = Math.round((mx - pad.left) / xStep);
+      const closestIdx = Math.round((mx - pad.left - _xOff) / xStep);
       if (closestIdx < 0 || closestIdx >= n) {{ canvas.title = ''; return; }}
       let tip = monthlyData[closestIdx].date + ' (' + monthlyData[closestIdx].dow + ')\\n';
       if (visible['-1']) tip += 'Team Total: ' + monthlyData[closestIdx].count + '\\n';
@@ -2393,7 +2491,10 @@ function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(val, pad.left - 8, y + 4);
     }}
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {{start:0,end:1}};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w, dashed) {{
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dashed || []);
@@ -2421,6 +2522,10 @@ function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillStyle = grad; ctx.fill();
     }}
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
     driPeople.forEach((p, idx) => {{
       if (!driVis['p'+idx]) return;
       const c = PERSON_COLORS[idx % PERSON_COLORS.length];
@@ -2447,10 +2552,11 @@ function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }}
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {{
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\\n';
@@ -2707,7 +2813,10 @@ function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(val, pad.left - 8, y + 4);
     }}
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {{start:0,end:1}};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w) {{
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
@@ -2735,6 +2844,10 @@ function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillStyle = grad; ctx.fill();
     }}
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
     // Person lines
     bkPeople.forEach((p, idx) => {{
       if (!bkVis['p'+idx]) return;
@@ -2759,10 +2872,11 @@ function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }}
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {{
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\\n';
@@ -3017,7 +3131,10 @@ function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(val, pad.left - 8, y + 4);
     }}
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {{start:0,end:1}};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w) {{
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
@@ -3044,6 +3161,10 @@ function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
       ctx.fillStyle = grad; ctx.fill();
     }}
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
 
     // Person lines
     mlPeople.forEach((p, idx) => {{
@@ -3077,10 +3198,11 @@ function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }}
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {{
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\\n';
@@ -3145,84 +3267,6 @@ function rebuildMlLegends() {{
 }}
 rebuildMlLegends();
 
-// ML Monthly Stacked Bar Chart (queue breakdown)
-(function() {{
-  const canvas = document.getElementById('mlQueueChart');
-  if (!canvas || !mlMonthly.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-
-  window.drawMlQueueChart = function() {{
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const W = rect.width; const H = 300;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-
-    const pad = {{ top: 24, right: 20, bottom: 48, left: 55 }};
-    const cw = W - pad.left - pad.right;
-    const ch = H - pad.top - pad.bottom;
-    const n = mlMonthly.length;
-    if (n < 1) return;
-
-    const maxVal = Math.max(1, ...mlMonthly.map(d => d.total));
-    const yMax = Math.ceil(maxVal / 200) * 200 || 200;
-
-    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
-    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
-    for (let i = 0; i <= 5; i++) {{
-      const val = Math.round(yMax * i / 5);
-      const y = pad.top + ch - (ch * i / 5);
-      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
-      ctx.fillText(val, pad.left - 8, y + 4);
-    }}
-
-    const barW = Math.min(50, (cw / n) * 0.6);
-    const gap = cw / n;
-
-    mlMonthly.forEach((d, i) => {{
-      const x = pad.left + i * gap + (gap - barW) / 2;
-      let yOff = 0;
-      mlQueues.forEach(q => {{
-        const val = d[q] || 0;
-        const bh = (val / yMax) * ch;
-        const y = pad.top + ch - yOff - bh;
-        ctx.fillStyle = ML_QUEUE_COLORS[q] || '#666';
-        ctx.fillRect(x, y, barW, bh);
-        yOff += bh;
-      }});
-      ctx.fillStyle = '#e4e4e7'; ctx.font = 'bold 10px -apple-system, sans-serif'; ctx.textAlign = 'center';
-      const topY = pad.top + ch - (d.total / yMax) * ch;
-      ctx.fillText(d.total, x + barW / 2, topY - 5);
-      ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif';
-      ctx.fillText(d.month, x + barW / 2, H - pad.bottom + 16);
-    }});
-
-    // Legend
-    ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'left';
-    let lx = pad.left;
-    mlQueues.forEach(q => {{
-      ctx.fillStyle = ML_QUEUE_COLORS[q] || '#666';
-      ctx.fillRect(lx, pad.top - 16, 10, 10);
-      ctx.fillStyle = '#a1a1aa';
-      ctx.fillText(q, lx + 14, pad.top - 7);
-      lx += ctx.measureText(q).width + 28;
-    }});
-
-    canvas.onmousemove = function(e) {{
-      const r = canvas.getBoundingClientRect();
-      const mx = e.clientX - r.left;
-      const idx = Math.floor((mx - pad.left) / gap);
-      if (idx < 0 || idx >= n) {{ canvas.title = ''; return; }}
-      const d = mlMonthly[idx];
-      let tip = d.month + '\\nTotal: ' + d.total + '\\n';
-      mlQueues.forEach(q => {{ if (d[q]) tip += q + ': ' + d[q] + '\\n'; }});
-      canvas.title = tip.trim();
-    }};
-  }};
-  drawMlQueueChart();
-}})();
 
 // ============================================================
 // === Evasion Cases Tab — Cap-Evasion Manual Reviews ===
@@ -3274,7 +3318,10 @@ function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(val, pad.left - 8, y + 4);
     }}
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {{start:0,end:1}};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w, dashed) {{
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dashed || []);
@@ -3302,6 +3349,10 @@ function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillStyle = grad; ctx.fill();
     }}
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
     evPeople.forEach((p, idx) => {{
       if (!evVis['p'+idx]) return;
       const c = PERSON_COLORS[idx % PERSON_COLORS.length];
@@ -3328,10 +3379,11 @@ function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {{
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }}
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {{
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) {{ canvas.title = ''; return; }}
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\\n';
@@ -3394,15 +3446,11 @@ rebuildEvLegends();
 
 window.addEventListener('resize', () => {{
   if (document.getElementById('tab-evasion').classList.contains('active')) {{
-    if (typeof drawMlDailyChart === 'function') drawMlDailyChart();
-    if (typeof drawMlWeeklyChart === 'function') drawMlWeeklyChart();
-    if (typeof drawMlQueueChart === 'function') drawMlQueueChart();
-    window.drawEvDailyChart(); window.drawEvWeeklyChart();
-    if (typeof drawEvBreakdown === 'function') drawEvBreakdown();
+    redrawActiveEvSubTab();
   }}
 }});
 
-// === Evasion Action Breakdown Chart (horizontal bar) ===
+// === Evasion Action Breakdown Chart (donut) ===
 (function() {{
   const canvas = document.getElementById('evBreakdownChart');
   const legendEl = document.getElementById('evBreakdownLegend');
@@ -3414,34 +3462,64 @@ window.addEventListener('resize', () => {{
 
   window.drawEvBreakdown = function() {{
     const rect = canvas.parentElement.getBoundingClientRect();
-    const W = Math.min(rect.width - 220, 500); const H = 220;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const S = 220;
+    canvas.width = S * dpr; canvas.height = S * dpr;
+    canvas.style.width = S + 'px'; canvas.style.height = S + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, 0, S, S);
 
-    const maxVal = Math.max(1, ...evBreakdown.map(d => d.count));
-    const barH = Math.min(22, (H - 10) / evBreakdown.length - 4);
-    const labelW = 10;
-    const barAreaW = W - labelW - 50;
+    const cx = S / 2, cy = S / 2;
+    const outerR = S / 2 - 10;
+    const innerR = outerR * 0.55;
+    const total = evBreakdown.reduce((s, d) => s + d.count, 0);
+    if (total === 0) return;
 
-    let legendHtml = '';
+    let startAngle = -Math.PI / 2;
     evBreakdown.forEach((d, i) => {{
-      const y = 5 + i * (barH + 4);
-      const bw = (d.count / maxVal) * barAreaW;
+      const sliceAngle = (d.count / total) * Math.PI * 2;
       const color = BAR_COLORS[i % BAR_COLORS.length];
 
-      ctx.fillStyle = color + '33';
-      ctx.fillRect(labelW, y, barAreaW, barH);
+      // Draw arc slice
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, startAngle, startAngle + sliceAngle);
+      ctx.arc(cx, cy, innerR, startAngle + sliceAngle, startAngle, true);
+      ctx.closePath();
       ctx.fillStyle = color;
-      ctx.fillRect(labelW, y, bw, barH);
+      ctx.fill();
 
-      ctx.fillStyle = '#e4e4e7';
-      ctx.font = '11px -apple-system, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(d.count, labelW + bw + 6, y + barH - 5);
+      // Percentage label on slice (only if > 5%)
+      const pct = ((d.count / total) * 100);
+      if (pct > 5) {{
+        const midAngle = startAngle + sliceAngle / 2;
+        const labelR = (outerR + innerR) / 2;
+        const lx = cx + Math.cos(midAngle) * labelR;
+        const ly = cy + Math.sin(midAngle) * labelR;
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.round(pct) + '%', lx, ly);
+      }}
 
-      legendHtml += `<div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${{color}}"></span>${{d.action}} (${{d.count}})</div>`;
+      startAngle += sliceAngle;
+    }});
+
+    // Center total
+    ctx.fillStyle = '#e4e4e7';
+    ctx.font = 'bold 20px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(total, cx, cy - 6);
+    ctx.fillStyle = '#71717a';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.fillText('total', cx, cy + 12);
+
+    // Build legend
+    let legendHtml = '';
+    evBreakdown.forEach((d, i) => {{
+      const color = BAR_COLORS[i % BAR_COLORS.length];
+      const pct = ((d.count / total) * 100).toFixed(1);
+      legendHtml += '<div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + color + '"></span>' + d.action + ' (' + d.count + ', ' + pct + '%)</div>';
     }});
     legendEl.innerHTML = legendHtml;
   }};
@@ -3676,6 +3754,24 @@ function doRefresh(btn) {{
   btn.classList.add('loading');
   window.location.replace(window.location.origin + '/?force');
 }}
+
+// Apply timeline zoom & pan to all chart canvases
+const _zoomTargets = [
+  ['monthlyChart', () => window.drawChart && window.drawChart()],
+  ['driDailyChart', () => window.drawDriDailyChart && window.drawDriDailyChart()],
+  ['driWeeklyChart', () => window.drawDriWeeklyChart && window.drawDriWeeklyChart()],
+  ['bkDailyChart', () => window.drawBkDailyChart && window.drawBkDailyChart()],
+  ['bkWeeklyChart', () => window.drawBkWeeklyChart && window.drawBkWeeklyChart()],
+  ['mlDailyChart', () => window.drawMlDailyChart && window.drawMlDailyChart()],
+  ['mlWeeklyChart', () => window.drawMlWeeklyChart && window.drawMlWeeklyChart()],
+  ['evDailyChart', () => window.drawEvDailyChart && window.drawEvDailyChart()],
+  ['evWeeklyChart', () => window.drawEvWeeklyChart && window.drawEvWeeklyChart()],
+  ['evBreakdownChart', () => window.drawEvBreakdown && window.drawEvBreakdown()]
+];
+_zoomTargets.forEach(function(pair) {{
+  const c = document.getElementById(pair[0]);
+  if (c) makeTimeZoomable(c, pair[1]);
+}});
 
 // Auto-refresh every 30 minutes
 setInterval(function() {{
