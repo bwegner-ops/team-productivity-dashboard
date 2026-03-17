@@ -30,7 +30,8 @@ TEAM_MEMBERS = [
     "Angela Bautista", "Nikko Illastron",
     "Dominic Pardilla", "Branden Wegner", "Ayana Fabillaran Mendoza",
     "Nicholas Padilla", "JaNai Djerbi",
-    "Evelyn Ruiz", "Julia Ye", "Ajaia Gates"
+    "Evelyn Ruiz", "Julia Ye", "Ajaia Gates",
+    "Marivelle Solanzo"
 ]
 
 # DRI Work — Google Sheets config
@@ -60,7 +61,7 @@ EVASION_START_DATE = datetime(2026, 1, 1)
 
 EVASION_HANDLE_MAP = {
     **DRI_HANDLE_MAP,
-    "@marivelle": "Marivelle",
+    "@marivelle": "Marivelle Solanzo",
     "@zachariah": "Zachariah Barden",
 }
 
