@@ -50,7 +50,32 @@
     font-size: 12px;
     color: var(--muted);
   }
-
+  .refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .refresh-btn:hover { background: #2563eb; }
+  .refresh-btn:active { background: #1d4ed8; }
+  .refresh-btn.loading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .refresh-btn.loading .refresh-icon {
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 
   /* === Tabs === */
   .tabs {
@@ -286,6 +311,17 @@
     width: 100% !important;
     height: 340px !important;
   }
+  .chart-wrap { overflow: hidden; position: relative; }
+  .zoom-hint {
+    position: absolute;
+    bottom: 4px;
+    right: 8px;
+    font-size: 10px;
+    color: var(--muted);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 1;
+  }
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -506,11 +542,14 @@
 <div class="header">
   <div>
     <h1>Team Productivity Dashboard</h1>
-    <div class="subtitle">Monday, March 16, 2026 &mdash; Capital / SFS</div>
+    <div class="subtitle">Tuesday, March 17, 2026 &mdash; Capital / SFS</div>
   </div>
   <div class="meta">
-    <div style="color:var(--accent);font-weight:500">SNAPSHOT</div>
-    <div style="margin-top:4px">Generated March 16, 2026 at 05:19 PM</div>
+    <button class="refresh-btn" onclick="doRefresh(this)">
+      <span class="refresh-icon">&#x21bb;</span> Refresh
+    </button>
+    <div style="margin-top:6px">Updated 12:18:38 PM</div>
+    <div>Auto-refreshes every 30 min</div>
   </div>
 </div>
 
@@ -527,7 +566,7 @@
 <div class="kpi-row">
   <div class="kpi">
     <div class="label">Total Resolved Today</div>
-    <div class="value blue">123</div>
+    <div class="value blue">78</div>
   </div>
   <div class="kpi">
     <div class="label">Active Closers</div>
@@ -535,7 +574,7 @@
   </div>
   <div class="kpi">
     <div class="label">Team Avg</div>
-    <div class="value green">12.3</div>
+    <div class="value green">7.8</div>
   </div>
 </div>
 
@@ -587,6 +626,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="monthlyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="chartLegend"></div>
 </div>
@@ -622,15 +662,15 @@
 <div class="kpi-row">
   <div class="kpi">
     <div class="label">DRI Resolved (2026)</div>
-    <div class="value blue">0</div>
+    <div class="value blue">509</div>
   </div>
   <div class="kpi">
     <div class="label">DRI Submitted (2026)</div>
-    <div class="value purple">0</div>
+    <div class="value purple">612</div>
   </div>
   <div class="kpi">
     <div class="label">Active Resolvers</div>
-    <div class="value green">0</div>
+    <div class="value green">8</div>
   </div>
 </div>
 
@@ -682,6 +722,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="driDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="driDailyLegend"></div>
 </div>
@@ -693,6 +734,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="driWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="driWeeklyLegend"></div>
 </div>
@@ -719,15 +761,15 @@
 <div class="kpi-row">
   <div class="kpi">
     <div class="label">Total Received (2026)</div>
-    <div class="value blue">0</div>
+    <div class="value blue">985</div>
   </div>
   <div class="kpi">
     <div class="label">This Month</div>
-    <div class="value purple">0</div>
+    <div class="value purple">225</div>
   </div>
   <div class="kpi">
     <div class="label">Active Processors</div>
-    <div class="value green">0</div>
+    <div class="value green">4</div>
   </div>
 </div>
 
@@ -779,6 +821,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="bkDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="bkDailyLegend"></div>
 </div>
@@ -790,6 +833,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="bkWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="bkWeeklyLegend"></div>
 </div>
@@ -827,23 +871,22 @@
   </div>
   <div class="kpi">
     <div class="label">Manual Reviews (2026)</div>
-    <div class="value purple">0</div>
+    <div class="value purple">1053</div>
   </div>
   <div class="kpi">
     <div class="label">Actioned (SBI + Linked)</div>
-    <div class="value green">0</div>
+    <div class="value green">539</div>
   </div>
 </div>
 
-<!-- Side-by-side grid: ML left, Cap-Evasion right -->
-<div class="evasion-grid">
-
-<!-- ---- LEFT COLUMN: ML Evasion Cases ---- -->
-<div>
-<div style="border-left:3px solid #3b82f6;padding-left:12px;margin-bottom:12px">
-  <h2 style="margin:0;font-size:16px;color:#3b82f6">ML Evasion Cases</h2>
-  <span style="font-size:11px;color:var(--muted)">Source: Snowflake &mdash; APP_CAPITAL.OPERATIONS_CASES_REPORTING</span>
+<!-- Sub-tab navigation -->
+<div class="subtabs">
+  <div class="subtab active" onclick="switchEvSubTab('ev-ml')">ML Evasion Cases</div>
+  <div class="subtab" onclick="switchEvSubTab('ev-manual')">Cap-Evasion Manual Reviews</div>
 </div>
+
+<!-- ---- Sub-tab 1: ML Evasion Cases ---- -->
+<div class="subtab-content active" id="subtab-ev-ml">
 
 <div class="evasion-lb-grid">
   <div class="section-card" style="margin-bottom:0">
@@ -879,6 +922,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="mlDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="mlDailyLegend"></div>
 </div>
@@ -890,27 +934,15 @@
   </div>
   <div class="chart-wrap">
     <canvas id="mlWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="mlWeeklyLegend"></div>
 </div>
 
-<div class="chart-card">
-  <div class="board-header">
-    <h2>ML Cases by Queue &mdash; Monthly</h2>
-    <span style="font-size:12px;color:var(--muted)">Stacked bar</span>
-  </div>
-  <div class="chart-wrap">
-    <canvas id="mlQueueChart"></canvas>
-  </div>
-</div>
-</div><!-- /left column -->
+</div><!-- /subtab-ev-ml -->
 
-<!-- ---- RIGHT COLUMN: Cap-Evasion Manual Reviews ---- -->
-<div>
-<div style="border-left:3px solid #22c55e;padding-left:12px;margin-bottom:12px">
-  <h2 style="margin:0;font-size:16px;color:#22c55e">Cap-Evasion Manual Reviews</h2>
-  <span style="font-size:11px;color:var(--muted)">Source: Google Sheets &mdash; #cap-evasion shift schedule</span>
-</div>
+<!-- ---- Sub-tab 2: Cap-Evasion Manual Reviews ---- -->
+<div class="subtab-content" id="subtab-ev-manual">
 
 <div class="evasion-lb-grid">
   <div class="section-card" style="margin-bottom:0">
@@ -946,6 +978,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="evDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="evDailyLegend"></div>
 </div>
@@ -957,6 +990,7 @@
   </div>
   <div class="chart-wrap">
     <canvas id="evWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
   </div>
   <div class="legend" id="evWeeklyLegend"></div>
 </div>
@@ -971,9 +1005,8 @@
     <div id="evBreakdownLegend" style="font-size:12px;line-height:1.8"></div>
   </div>
 </div>
-</div><!-- /right column -->
 
-</div><!-- /side-by-side grid -->
+</div><!-- /subtab-ev-manual -->
 
 <!-- ---- Full-width: Combined Estimated Time Spent ---- -->
 <div style="border-left:3px solid #f59e0b;padding-left:12px;margin:20px 0 8px">
@@ -998,6 +1031,61 @@
 </div><!-- /tab-evasion -->
 
 <script>
+// === Timeline Zoom & Pan ===
+const chartViewport = {};
+
+function makeTimeZoomable(canvas, drawFn) {
+  const id = canvas.id;
+  chartViewport[id] = { start: 0, end: 1 };
+
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const vp = chartViewport[id];
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width;
+    const range = vp.end - vp.start;
+    const factor = e.deltaY > 0 ? 1.15 : 0.87;
+    const nr = Math.max(0.05, Math.min(1, range * factor));
+    const pivot = vp.start + mx * range;
+    let ns = pivot - mx * nr, ne = pivot + (1 - mx) * nr;
+    if (ns < 0) { ne -= ns; ns = 0; }
+    if (ne > 1) { ns -= (ne - 1); ne = 1; }
+    vp.start = Math.max(0, ns);
+    vp.end = Math.min(1, ne);
+    drawFn();
+  }, { passive: false });
+
+  let dragging = false, dragX, dragS, dragE;
+  canvas.addEventListener('mousedown', function(e) {
+    const vp = chartViewport[id];
+    if (vp.end - vp.start >= 0.99) return;
+    dragging = true;
+    dragX = e.clientX;
+    dragS = vp.start; dragE = vp.end;
+    canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    const vp = chartViewport[id];
+    const rect = canvas.getBoundingClientRect();
+    const dx = (e.clientX - dragX) / rect.width * (dragE - dragS);
+    let ns = dragS - dx, ne = dragE - dx;
+    if (ns < 0) { ne -= ns; ns = 0; }
+    if (ne > 1) { ns -= (ne - 1); ne = 1; }
+    vp.start = Math.max(0, ns);
+    vp.end = Math.min(1, ne);
+    drawFn();
+  });
+  window.addEventListener('mouseup', function() {
+    if (dragging) { dragging = false; canvas.style.cursor = ''; }
+  });
+  canvas.addEventListener('dblclick', function() {
+    chartViewport[id] = { start: 0, end: 1 };
+    drawFn();
+  });
+}
+
 // === Tab Switching ===
 function switchTab(id) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -1016,25 +1104,20 @@ function switchTab(id) {
     redrawActiveSubTab();
   }
   if (id === 'evasion') {
-    if (typeof drawMlDailyChart === 'function') setTimeout(drawMlDailyChart, 50);
-    if (typeof drawMlWeeklyChart === 'function') setTimeout(drawMlWeeklyChart, 60);
-    if (typeof drawMlQueueChart === 'function') setTimeout(drawMlQueueChart, 70);
-    if (typeof drawEvDailyChart === 'function') setTimeout(drawEvDailyChart, 80);
-    if (typeof drawEvWeeklyChart === 'function') setTimeout(drawEvWeeklyChart, 100);
-    if (typeof drawEvBreakdown === 'function') setTimeout(drawEvBreakdown, 120);
+    setTimeout(redrawActiveEvSubTab, 50);
   }
 }
 
 // === Sub-tab Switching (within DRI Work) ===
 function switchSubTab(id) {
-  document.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
+  const tab = document.getElementById('tab-dri');
+  tab.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
+  tab.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
   document.getElementById('subtab-' + id).classList.add('active');
   const subLabels = { 'dri-collections': 'SFS-Collections', 'dri-bankruptcy': 'Bankruptcy Cases' };
-  document.querySelectorAll('.subtab').forEach(el => {
+  tab.querySelectorAll('.subtab').forEach(el => {
     if (el.textContent === subLabels[id]) el.classList.add('active');
   });
-  // Redraw charts for the activated sub-tab
   setTimeout(redrawActiveSubTab, 50);
 }
 
@@ -1051,10 +1134,37 @@ function redrawActiveSubTab() {
   }
 }
 
+// === Sub-tab Switching (within Evasion Cases) ===
+function switchEvSubTab(id) {
+  const tab = document.getElementById('tab-evasion');
+  tab.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
+  tab.querySelectorAll('.subtab').forEach(el => el.classList.remove('active'));
+  document.getElementById('subtab-' + id).classList.add('active');
+  const subLabels = { 'ev-ml': 'ML Evasion Cases', 'ev-manual': 'Cap-Evasion Manual Reviews' };
+  tab.querySelectorAll('.subtab').forEach(el => {
+    if (el.textContent === subLabels[id]) el.classList.add('active');
+  });
+  setTimeout(redrawActiveEvSubTab, 50);
+}
+
+function redrawActiveEvSubTab() {
+  const mlActive = document.getElementById('subtab-ev-ml');
+  const evActive = document.getElementById('subtab-ev-manual');
+  if (mlActive && mlActive.classList.contains('active')) {
+    if (typeof drawMlDailyChart === 'function') setTimeout(drawMlDailyChart, 50);
+    if (typeof drawMlWeeklyChart === 'function') setTimeout(drawMlWeeklyChart, 60);
+  }
+  if (evActive && evActive.classList.contains('active')) {
+    if (typeof drawEvDailyChart === 'function') setTimeout(drawEvDailyChart, 50);
+    if (typeof drawEvWeeklyChart === 'function') setTimeout(drawEvWeeklyChart, 60);
+    if (typeof drawEvBreakdown === 'function') setTimeout(drawEvBreakdown, 80);
+  }
+}
+
 // === Monthly Multi-Line Chart ===
-const monthlyData = [{"date": "Mar 01", "count": 0, "dow": "Sun"}, {"date": "Mar 02", "count": 107, "dow": "Mon"}, {"date": "Mar 03", "count": 121, "dow": "Tue"}, {"date": "Mar 04", "count": 132, "dow": "Wed"}, {"date": "Mar 05", "count": 113, "dow": "Thu"}, {"date": "Mar 06", "count": 139, "dow": "Fri"}, {"date": "Mar 07", "count": 0, "dow": "Sat"}, {"date": "Mar 08", "count": 0, "dow": "Sun"}, {"date": "Mar 09", "count": 115, "dow": "Mon"}, {"date": "Mar 10", "count": 69, "dow": "Tue"}, {"date": "Mar 11", "count": 96, "dow": "Wed"}, {"date": "Mar 12", "count": 93, "dow": "Thu"}, {"date": "Mar 13", "count": 129, "dow": "Fri"}, {"date": "Mar 14", "count": 0, "dow": "Sat"}, {"date": "Mar 15", "count": 0, "dow": "Sun"}, {"date": "Mar 16", "count": 124, "dow": "Mon"}];
-const peopleData = [{"name": "Julia Ye", "counts": [0, 12, 19, 13, 11, 21, 0, 0, 26, 9, 31, 37, 25, 0, 0, 29], "total": 233}, {"name": "JaNai Djerbi", "counts": [0, 15, 21, 13, 18, 24, 0, 0, 24, 12, 0, 13, 13, 0, 0, 16], "total": 169}, {"name": "Angela Bautista", "counts": [0, 22, 24, 35, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "total": 143}, {"name": "Evelyn Ruiz", "counts": [0, 11, 20, 16, 15, 18, 0, 0, 14, 5, 4, 11, 17, 0, 0, 6], "total": 137}, {"name": "Nikko Illastron", "counts": [0, 6, 12, 15, 7, 11, 0, 0, 14, 4, 12, 9, 6, 0, 0, 18], "total": 114}, {"name": "Nicholas Padilla", "counts": [0, 7, 7, 5, 15, 20, 0, 0, 15, 8, 7, 5, 13, 0, 0, 0], "total": 102}, {"name": "Dominic Pardilla", "counts": [0, 20, 2, 17, 8, 0, 0, 0, 1, 16, 5, 1, 7, 0, 0, 19], "total": 96}, {"name": "Branden Wegner", "counts": [0, 4, 13, 12, 0, 0, 0, 0, 1, 0, 26, 9, 16, 0, 0, 10], "total": 91}, {"name": "Ajaia Gates", "counts": [0, 10, 3, 2, 4, 4, 0, 0, 8, 4, 11, 8, 12, 0, 0, 12], "total": 78}, {"name": "Ayana Fabillaran Mendoza", "counts": [0, 0, 0, 4, 4, 10, 0, 0, 12, 11, 0, 0, 20, 0, 0, 14], "total": 75}];
-const peakQueueTotal = 99;
+const monthlyData = [{"date": "Mar 01", "count": 0, "dow": "Sun"}, {"date": "Mar 02", "count": 107, "dow": "Mon"}, {"date": "Mar 03", "count": 120, "dow": "Tue"}, {"date": "Mar 04", "count": 132, "dow": "Wed"}, {"date": "Mar 05", "count": 113, "dow": "Thu"}, {"date": "Mar 06", "count": 139, "dow": "Fri"}, {"date": "Mar 07", "count": 0, "dow": "Sat"}, {"date": "Mar 08", "count": 0, "dow": "Sun"}, {"date": "Mar 09", "count": 115, "dow": "Mon"}, {"date": "Mar 10", "count": 69, "dow": "Tue"}, {"date": "Mar 11", "count": 94, "dow": "Wed"}, {"date": "Mar 12", "count": 92, "dow": "Thu"}, {"date": "Mar 13", "count": 124, "dow": "Fri"}, {"date": "Mar 14", "count": 0, "dow": "Sat"}, {"date": "Mar 15", "count": 0, "dow": "Sun"}, {"date": "Mar 16", "count": 107, "dow": "Mon"}, {"date": "Mar 17", "count": 78, "dow": "Tue"}];
+const peopleData = [{"name": "Julia Ye", "counts": [0, 12, 19, 13, 11, 21, 0, 0, 26, 9, 30, 36, 25, 0, 0, 24, 25], "total": 251}, {"name": "JaNai Djerbi", "counts": [0, 15, 21, 13, 18, 24, 0, 0, 24, 12, 0, 13, 13, 0, 0, 16, 25], "total": 194}, {"name": "Angela Bautista", "counts": [0, 22, 24, 35, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "total": 143}, {"name": "Evelyn Ruiz", "counts": [0, 11, 20, 16, 15, 18, 0, 0, 14, 5, 3, 11, 17, 0, 0, 6, 2], "total": 138}, {"name": "Nikko Illastron", "counts": [0, 6, 11, 15, 7, 11, 0, 0, 14, 4, 12, 9, 6, 0, 0, 13, 7], "total": 115}, {"name": "Dominic Pardilla", "counts": [0, 20, 2, 17, 8, 0, 0, 0, 1, 16, 5, 1, 5, 0, 0, 16, 11], "total": 102}, {"name": "Nicholas Padilla", "counts": [0, 7, 7, 5, 15, 20, 0, 0, 15, 8, 7, 5, 13, 0, 0, 0, 0], "total": 102}, {"name": "Branden Wegner", "counts": [0, 4, 13, 12, 0, 0, 0, 0, 1, 0, 26, 9, 16, 0, 0, 9, 1], "total": 91}, {"name": "Ayana Fabillaran Mendoza", "counts": [0, 0, 0, 4, 4, 10, 0, 0, 12, 11, 0, 0, 18, 0, 0, 13, 6], "total": 78}, {"name": "Ajaia Gates", "counts": [0, 10, 3, 2, 4, 4, 0, 0, 8, 4, 11, 8, 11, 0, 0, 10, 1], "total": 76}];
+const peakQueueTotal = 57;
 
 const PERSON_COLORS = [
   '#f59e0b','#ef4444','#22c55e','#a855f7','#ec4899',
@@ -1152,7 +1262,10 @@ function buildLegend() {
       ctx.fillText(val, pad.left - 8, y + 4);
     }
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport['monthlyChart'] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
 
     // Helper: draw a line series
     function drawLine(counts, color, width, dashed) {
@@ -1201,6 +1314,11 @@ function buildLegend() {
       ctx.textAlign = 'right';
       ctx.fillText('Queue: ' + peakQueueTotal, W - pad.right, peakY - 5);
     }
+
+    // Clip to chart area for zoom/pan
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
 
     // Draw individual person lines first (behind total)
     peopleData.forEach((p, idx) => {
@@ -1270,11 +1388,13 @@ function buildLegend() {
       ctx.fillText(monthlyData[i].dow, x, H - pad.bottom + 28);
     }
 
+    ctx.restore(); // end zoom clip
+
     // Tooltip on hover - show values for all visible series
     canvas.onmousemove = function(e) {
       const rect2 = canvas.getBoundingClientRect();
       const mx = e.clientX - rect2.left;
-      const closestIdx = Math.round((mx - pad.left) / xStep);
+      const closestIdx = Math.round((mx - pad.left - _xOff) / xStep);
       if (closestIdx < 0 || closestIdx >= n) { canvas.title = ''; return; }
       let tip = monthlyData[closestIdx].date + ' (' + monthlyData[closestIdx].dow + ')\n';
       if (visible['-1']) tip += 'Team Total: ' + monthlyData[closestIdx].count + '\n';
@@ -1385,8 +1505,8 @@ function buildLegend() {
   tfoot.innerHTML = frow;
 })();
 
-const teamData = [{"name": "Julia Ye", "count": 29, "cases": [{"account": "-", "caseNumber": "116165836", "closedDate": "3/16/2026 8:27 AM", "subject": "Loan Payback Locations"}, {"account": "Sunflower Eagle", "caseNumber": "116211611", "closedDate": "3/16/2026 8:32 AM", "subject": "Message from Square"}, {"account": "Pride Repair Service", "caseNumber": "116388189", "closedDate": "3/16/2026 8:33 AM", "subject": "Message from Square"}, {"account": "A Cutt Above Detail", "caseNumber": "116256592", "closedDate": "3/16/2026 8:37 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Love Me Lashes", "caseNumber": "116218114", "closedDate": "3/16/2026 8:53 AM", "subject": "Message from Square"}, {"account": "Cab Driver", "caseNumber": "116305627", "closedDate": "3/16/2026 8:55 AM", "subject": "Message from Square"}, {"account": "Emma Anns", "caseNumber": "115910594", "closedDate": "3/16/2026 8:56 AM", "subject": "Loan Maturity Collections Payment Plan"}, {"account": "Kuttz", "caseNumber": "116298827", "closedDate": "3/16/2026 9:01 AM", "subject": "Follow up on payment agreement"}, {"account": "Kids Beauty Salon", "caseNumber": "116128836", "closedDate": "3/16/2026 9:11 AM", "subject": "Message from Square"}, {"account": "G TOURNAI", "caseNumber": "116198813", "closedDate": "3/16/2026 9:16 AM", "subject": "Message from Square"}, {"account": "Royal Makaha Incorporated", "caseNumber": "116241382", "closedDate": "3/16/2026 9:27 AM", "subject": "Message from Square"}, {"account": "Precious Paws Salon and Spa", "caseNumber": "116301972", "closedDate": "3/16/2026 9:39 AM", "subject": "Past Due Collections Prior 5 Days"}, {"account": "-", "caseNumber": "116312639", "closedDate": "3/16/2026 9:56 AM", "subject": "Re: Action Required: Failed payments"}, {"account": "Paccs Trap LLC.", "caseNumber": "116391642", "closedDate": "3/16/2026 10:16 AM", "subject": "Message from Square"}, {"account": "IV Drip Chicks", "caseNumber": "116391800", "closedDate": "3/16/2026 10:20 AM", "subject": "Message from Square"}, {"account": "Holly's Hog Heaven", "caseNumber": "116392906", "closedDate": "3/16/2026 10:55 AM", "subject": "Message from Square"}, {"account": "UNKNOWN", "caseNumber": "116394844", "closedDate": "3/16/2026 11:53 AM", "subject": "Message from Square"}, {"account": "Lowery Holding Company LLC", "caseNumber": "116400452", "closedDate": "3/16/2026 2:54 PM", "subject": "Message from Square"}, {"account": "Southeast Stitchery", "caseNumber": "116204617", "closedDate": "3/16/2026 3:43 PM", "subject": "Past Due Collections Prior 10 Days"}, {"account": "Circle W Market INC", "caseNumber": "116345378", "closedDate": "3/16/2026 3:53 PM", "subject": "Message from Square"}, {"account": "Madison Mushrooms", "caseNumber": "116213541", "closedDate": "3/16/2026 3:56 PM", "subject": "Message from Square"}, {"account": "Masters Generator And Electrical Service", "caseNumber": "116305308", "closedDate": "3/16/2026 4:03 PM", "subject": "Message from Square"}, {"account": "Fresh Cuts", "caseNumber": "116307989", "closedDate": "3/16/2026 4:05 PM", "subject": "Message from Square"}, {"account": "Clear Glass Window Cleaning, LLC", "caseNumber": "116310580", "closedDate": "3/16/2026 4:29 PM", "subject": "Message from Square"}, {"account": "A&M Cleaning Co.", "caseNumber": "116345227", "closedDate": "3/16/2026 4:38 PM", "subject": "Re: [Urgent: Action Required] Link a bank for upcoming loan payment."}, {"account": "Blissful Hair Extensions", "caseNumber": "116345418", "closedDate": "3/16/2026 4:45 PM", "subject": "Message from Square"}, {"account": "Johnsons Auto Service", "caseNumber": "116338544", "closedDate": "3/16/2026 4:46 PM", "subject": "Message from Square"}, {"account": "Union Social House", "caseNumber": "116293454", "closedDate": "3/16/2026 4:57 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "JRW Mobile Detailing LLC", "caseNumber": "116346702", "closedDate": "3/16/2026 5:01 PM", "subject": "Maturity Debit Failed"}]}, {"name": "Dominic Pardilla", "count": 19, "cases": [{"account": "Tiki Monkey, LLC", "caseNumber": "115754132", "closedDate": "3/16/2026 10:10 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Michelle Casper", "caseNumber": "115780137", "closedDate": "3/16/2026 10:13 AM", "subject": "Message from Square"}, {"account": "Lisa Tullis", "caseNumber": "116141276", "closedDate": "3/16/2026 10:18 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Violet Pineapple Balloons", "caseNumber": "116218047", "closedDate": "3/16/2026 10:29 AM", "subject": "Message from Square"}, {"account": "direct vision", "caseNumber": "116256544", "closedDate": "3/16/2026 1:32 PM", "subject": "Maturity Debit Reminder 30 Day Partial Unlinked"}, {"account": "-", "caseNumber": "116265643", "closedDate": "3/16/2026 1:36 PM", "subject": "Message from Square"}, {"account": "Kristin Olson, Ph.D.", "caseNumber": "116286377", "closedDate": "3/16/2026 1:40 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Phantom Stranger Records", "caseNumber": "116169126", "closedDate": "3/16/2026 1:50 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "Wellness Revival Co.", "caseNumber": "116350167", "closedDate": "3/16/2026 2:22 PM", "subject": "Default Accelerated Payment"}, {"account": "Wellness Revival Co.", "caseNumber": "116088187", "closedDate": "3/16/2026 2:25 PM", "subject": "Deactivated Notification"}, {"account": "-", "caseNumber": "116295914", "closedDate": "3/16/2026 2:30 PM", "subject": "Message from Square"}, {"account": "Banana Pudding Krazy", "caseNumber": "116304546", "closedDate": "3/16/2026 2:32 PM", "subject": "Message from Square"}, {"account": "Sequoia Massage Therapy", "caseNumber": "116315643", "closedDate": "3/16/2026 2:37 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Pedro J Rios LLC", "caseNumber": "116316612", "closedDate": "3/16/2026 2:44 PM", "subject": "Message from Square"}, {"account": "Winfield Flooring", "caseNumber": "116316635", "closedDate": "3/16/2026 2:50 PM", "subject": "Message from Square"}, {"account": "Texi", "caseNumber": "116316868", "closedDate": "3/16/2026 2:56 PM", "subject": "Automatic Payment Plan Debit Failed"}, {"account": "AP Cutz", "caseNumber": "116318686", "closedDate": "3/16/2026 3:00 PM", "subject": "Maturity Nondebitable"}, {"account": "Salon ennovY", "caseNumber": "116318870", "closedDate": "3/16/2026 3:08 PM", "subject": "Maturity Debit Initiated"}, {"account": "Beloved Divine Designs", "caseNumber": "116319931", "closedDate": "3/16/2026 3:13 PM", "subject": "Message from Square"}]}, {"name": "Nikko Illastron", "count": 18, "cases": [{"account": "Cafecito on Palm", "caseNumber": "116389116", "closedDate": "3/16/2026 9:01 AM", "subject": "Message from Square"}, {"account": "Fire Food truck", "caseNumber": "116390031", "closedDate": "3/16/2026 10:05 AM", "subject": "Message from Square"}, {"account": "XPizza", "caseNumber": "115357541", "closedDate": "3/16/2026 11:16 AM", "subject": "Message from Square"}, {"account": "platinum catering productions llc.", "caseNumber": "116100344", "closedDate": "3/16/2026 3:25 PM", "subject": "Message from Square"}, {"account": "Salinas Pizza & Pints Co.", "caseNumber": "116220183", "closedDate": "3/16/2026 3:28 PM", "subject": "Maturity Debit Initiated"}, {"account": "[Churned ] - Mt. Si Restaurant and Lounge", "caseNumber": "116100993", "closedDate": "3/16/2026 3:42 PM", "subject": "Message from Square"}, {"account": "Jennifer Brinn, Reiki Intuitive Wellness", "caseNumber": "115940990", "closedDate": "3/16/2026 3:49 PM", "subject": "Maturity Debit Failed"}, {"account": "Danny Agena", "caseNumber": "116168794", "closedDate": "3/16/2026 3:53 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "scuba source llc", "caseNumber": "116396917", "closedDate": "3/16/2026 4:05 PM", "subject": "Message from Square"}, {"account": "Artistic Vision Tattoo", "caseNumber": "116369942", "closedDate": "3/16/2026 4:21 PM", "subject": "Maturity Debit Initiated"}, {"account": "UNKNOWN", "caseNumber": "116346846", "closedDate": "3/16/2026 4:27 PM", "subject": "Maturity Nondebitable"}, {"account": "Everett Considine", "caseNumber": "116318642", "closedDate": "3/16/2026 4:28 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "Glam It Up", "caseNumber": "116346388", "closedDate": "3/16/2026 4:32 PM", "subject": "Maturity Nondebitable"}, {"account": "-", "caseNumber": "116395275", "closedDate": "3/16/2026 4:35 PM", "subject": "Message from Square"}, {"account": "Tipsy Gypsy Boutique", "caseNumber": "116400015", "closedDate": "3/16/2026 4:38 PM", "subject": "Message from Square"}, {"account": "Crooklyn Cutz", "caseNumber": "116218216", "closedDate": "3/16/2026 3:17 PM", "subject": "Message from Square"}, {"account": "Samitotransportations llc", "caseNumber": "116358043", "closedDate": "3/16/2026 3:51 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Events By AD LLC", "caseNumber": "116231207", "closedDate": "3/16/2026 4:23 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}]}, {"name": "JaNai Djerbi", "count": 16, "cases": [{"account": "Rosa Roasting and Imports LLC", "caseNumber": "114998974", "closedDate": "3/16/2026 8:01 AM", "subject": "Automatic Payment Plan Debit Initiated"}, {"account": "BYOU Laser Clinic", "caseNumber": "115412535", "closedDate": "3/16/2026 8:10 AM", "subject": "Message from Square"}, {"account": "Hibachi Time LA", "caseNumber": "116138597", "closedDate": "3/16/2026 8:21 AM", "subject": "Maturity Debit Initiated"}, {"account": "Monarch Resolution", "caseNumber": "116165562", "closedDate": "3/16/2026 8:28 AM", "subject": "Message from Square"}, {"account": "Kismet Boutique", "caseNumber": "116168447", "closedDate": "3/16/2026 8:33 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116181205", "closedDate": "3/16/2026 8:47 AM", "subject": "Loan balance"}, {"account": "Badasci Mobile Auto Repair", "caseNumber": "116261865", "closedDate": "3/16/2026 8:52 AM", "subject": "Message from Square"}, {"account": "Seasons' Noodle", "caseNumber": "116280863", "closedDate": "3/16/2026 9:19 AM", "subject": "Message from Square"}, {"account": "Kismet Boutique", "caseNumber": "116283629", "closedDate": "3/16/2026 9:20 AM", "subject": "Message from Square"}, {"account": "Nollie's", "caseNumber": "116286318", "closedDate": "3/16/2026 9:40 AM", "subject": "Message from Square"}, {"account": "mendola painting", "caseNumber": "116296433", "closedDate": "3/16/2026 10:04 AM", "subject": "Payment Plan Confirmation"}, {"account": "Minnesota Taxi", "caseNumber": "116307110", "closedDate": "3/16/2026 10:44 AM", "subject": "Re: Action required: Please link a bank account for your past due payment"}, {"account": "Ricch Rootz Studio", "caseNumber": "116310145", "closedDate": "3/16/2026 11:08 AM", "subject": "Maturity Debit Reminder 10 Day Partial Unlinked"}, {"account": "Anu Littles", "caseNumber": "116398123", "closedDate": "3/16/2026 1:37 PM", "subject": "Message from Square"}, {"account": "Formerly Point Break Tacos", "caseNumber": "116339327", "closedDate": "3/16/2026 2:55 PM", "subject": "Message from Square"}, {"account": "Dakota Check Cashing And Services Inc.", "caseNumber": "116400825", "closedDate": "3/16/2026 3:04 PM", "subject": "Message from Square"}]}, {"name": "Ayana Fabillaran Mendoza", "count": 13, "cases": [{"account": "Giocorporationllc", "caseNumber": "116391359", "closedDate": "3/16/2026 11:14 AM", "subject": "Message from Square"}, {"account": "Lex Events & Floral Design", "caseNumber": "116308671", "closedDate": "3/16/2026 1:56 PM", "subject": "Add Payer"}, {"account": "FatboyTXBbq", "caseNumber": "116148411", "closedDate": "3/16/2026 1:58 PM", "subject": "Payment Plan Completed"}, {"account": "The Blue Melody LLC", "caseNumber": "116344809", "closedDate": "3/16/2026 2:45 PM", "subject": "An Emerald Invitation Awaits\u2026"}, {"account": "-", "caseNumber": "116338432", "closedDate": "3/16/2026 2:48 PM", "subject": "Don share a document with you for your review"}, {"account": "Emis Cuts", "caseNumber": "116349118", "closedDate": "3/16/2026 3:47 PM", "subject": "Message from Square"}, {"account": "Tunney Jewelry's", "caseNumber": "116323294", "closedDate": "3/16/2026 3:48 PM", "subject": "Message from Square"}, {"account": "Sleep Shop and Furniture", "caseNumber": "116286423", "closedDate": "3/16/2026 5:04 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "HAIR JUNKIE HEATHER", "caseNumber": "116263168", "closedDate": "3/16/2026 5:05 PM", "subject": "Default Accelerated Payment"}, {"account": "Carly Kennedy", "caseNumber": "116291847", "closedDate": "3/16/2026 5:09 PM", "subject": "Message from Square"}, {"account": "CITY LIGHTS, LLC.", "caseNumber": "116292536", "closedDate": "3/16/2026 5:10 PM", "subject": "Message from Square"}, {"account": "ConfortCarService", "caseNumber": "116318581", "closedDate": "3/16/2026 5:11 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "Lounge 43", "caseNumber": "116318552", "closedDate": "3/16/2026 5:16 PM", "subject": "Message from Square"}]}, {"name": "Ajaia Gates", "count": 12, "cases": [{"account": "Mikel Slate", "caseNumber": "116200725", "closedDate": "3/16/2026 10:25 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116222890", "closedDate": "3/16/2026 12:04 PM", "subject": "Message from Square"}, {"account": "Aryh Portable Restrooms LLC", "caseNumber": "115753879", "closedDate": "3/16/2026 12:23 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Gosq.Com Ryan Penn", "caseNumber": "116224368", "closedDate": "3/16/2026 2:02 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "-", "caseNumber": "116220226", "closedDate": "3/16/2026 2:26 PM", "subject": "Message from Square"}, {"account": "Two What Knots", "caseNumber": "115753997", "closedDate": "3/16/2026 2:47 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Frou Boutique", "caseNumber": "116263089", "closedDate": "3/16/2026 4:08 PM", "subject": "Maturity Debit Failed"}, {"account": "Precision Window Tinting", "caseNumber": "116283328", "closedDate": "3/16/2026 4:14 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Precision Window Tinting", "caseNumber": "116287177", "closedDate": "3/16/2026 4:18 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Tidal Junk Removal & Hauling", "caseNumber": "116318689", "closedDate": "3/16/2026 4:32 PM", "subject": "Maturity Debit Failed"}, {"account": "Reset Weight Loss and Rejuvenation Program", "caseNumber": "116335663", "closedDate": "3/16/2026 4:39 PM", "subject": "Message from Square"}, {"account": "AlanaTaylorAesthetics", "caseNumber": "116346529", "closedDate": "3/16/2026 5:02 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}]}, {"name": "Branden Wegner", "count": 10, "cases": [{"account": "Make A Way Auto Sales LLC", "caseNumber": "113549108", "closedDate": "3/16/2026 2:36 PM", "subject": "Message from Square"}, {"account": "Courageous Heart Space & HAIR ~ By LaLaneya", "caseNumber": "116163834", "closedDate": "3/16/2026 3:02 PM", "subject": "Message from Square"}, {"account": "The Mac Surgeon", "caseNumber": "116195687", "closedDate": "3/16/2026 3:05 PM", "subject": "Message from Square"}, {"account": "Theo\u2019s Seafood & Pasta Express", "caseNumber": "116198011", "closedDate": "3/16/2026 3:14 PM", "subject": "Deactivated Collections 1"}, {"account": "Karin", "caseNumber": "116199324", "closedDate": "3/16/2026 3:16 PM", "subject": "Message from Square"}, {"account": "Skin By Ec LLC", "caseNumber": "116230810", "closedDate": "3/16/2026 3:21 PM", "subject": "Automatic Payment Plan Failure"}, {"account": "-", "caseNumber": "116300964", "closedDate": "3/16/2026 3:24 PM", "subject": "POA Sent via Email to sfscollections@squareup.com"}, {"account": "Luxe Hair Lounge", "caseNumber": "116310421", "closedDate": "3/16/2026 3:26 PM", "subject": "Message from Square"}, {"account": "Cucina Florabella", "caseNumber": "116349241", "closedDate": "3/16/2026 3:27 PM", "subject": "Re: [Final Notice] Your remaining loan balance is due. Let us help."}, {"account": "-", "caseNumber": "116163816", "closedDate": "3/16/2026 3:03 PM", "subject": "FW: POWER OF ATTORNEY"}]}, {"name": "Evelyn Ruiz", "count": 6, "cases": [{"account": "Dulces colores bakery", "caseNumber": "116181879", "closedDate": "3/16/2026 3:11 PM", "subject": "Maturity Nondebitable"}, {"account": "-", "caseNumber": "116347332", "closedDate": "3/16/2026 3:27 PM", "subject": "Message from Square"}, {"account": "La Costa Cafe Boriken", "caseNumber": "116356884", "closedDate": "3/16/2026 4:04 PM", "subject": "Message from Square"}, {"account": "Chaput Law Office", "caseNumber": "116390652", "closedDate": "3/16/2026 4:17 PM", "subject": "Message from Square"}, {"account": "Pochosmango", "caseNumber": "116251060", "closedDate": "3/16/2026 4:38 PM", "subject": "Manual Payment Plan Upcoming Payment Reminder"}, {"account": "Temple Of The Dog & Meow Lounge", "caseNumber": "116269327", "closedDate": "3/16/2026 4:44 PM", "subject": "Message from Square"}]}, {"name": "Angela Bautista", "count": 0, "cases": []}, {"name": "Nicholas Padilla", "count": 0, "cases": []}];
-const queueData = {"Evelyn Ruiz": 18, "Julia Ye": 16, "Nikko Illastron": 15, "Janai Djerbi": 15, "Ajaia Gates": 15, "Ayana Fabillaran Mendoza": 13, "Nicholas Padilla": 8, "Dominic Pardilla": 2, "Branden Wegner": 2, "Angela Bautista": 1};
+const teamData = [{"name": "JaNai Djerbi", "count": 25, "cases": [{"account": "JPGrout", "caseNumber": "115879213", "closedDate": "3/17/2026 7:09 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "The Dough Hook", "caseNumber": "116293992", "closedDate": "3/17/2026 7:18 AM", "subject": "Automatic Payment Plan Failure"}, {"account": "Divine Wellness 616", "caseNumber": "116306475", "closedDate": "3/17/2026 7:27 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Virtual Assistants of the Carolinas Inc.", "caseNumber": "116307538", "closedDate": "3/17/2026 7:46 AM", "subject": "Message from Square"}, {"account": "Punctual Solutions LLC", "caseNumber": "116312181", "closedDate": "3/17/2026 7:54 AM", "subject": "Message from Square"}, {"account": "Schmittous snack shack", "caseNumber": "116262989", "closedDate": "3/17/2026 8:02 AM", "subject": "Automatic Payment Plan Debit Failed"}, {"account": "No Worries Curry", "caseNumber": "116307657", "closedDate": "3/17/2026 8:44 AM", "subject": "Maturity Debit Reminder 10 Day Partial Unlinked"}, {"account": "Bethany treasury", "caseNumber": "115947362", "closedDate": "3/17/2026 8:48 AM", "subject": "Maturity Debit Reminder 30 Day Partial Unlinked"}, {"account": "Boutique 3 Thirty One", "caseNumber": "116157530", "closedDate": "3/17/2026 9:11 AM", "subject": "Message from Square"}, {"account": "David Oviedo", "caseNumber": "116336133", "closedDate": "3/17/2026 9:27 AM", "subject": "Automatic Payment Plan Debit Initiated"}, {"account": "queens of the Underworld", "caseNumber": "116337431", "closedDate": "3/17/2026 9:32 AM", "subject": "Message from Square"}, {"account": "rio rio", "caseNumber": "116421795", "closedDate": "3/17/2026 9:44 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116337496", "closedDate": "3/17/2026 10:14 AM", "subject": "Message from Square"}, {"account": "Carreon Publishing LLC", "caseNumber": "116339121", "closedDate": "3/17/2026 10:18 AM", "subject": "Message from Square"}, {"account": "MOVE Nutrition", "caseNumber": "116339800", "closedDate": "3/17/2026 10:24 AM", "subject": "Message from Square"}, {"account": "Crocus Hill Acupuncture", "caseNumber": "116346789", "closedDate": "3/17/2026 10:39 AM", "subject": "Maturity Nondebitable"}, {"account": "Jennifer Inspired Design", "caseNumber": "116350091", "closedDate": "3/17/2026 10:46 AM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "Old Crow BBQ LLC", "caseNumber": "116355359", "closedDate": "3/17/2026 11:00 AM", "subject": "Automatic Payment Plan Debit Initiated"}, {"account": "Acupuncture sports injury and wellness", "caseNumber": "116356202", "closedDate": "3/17/2026 11:11 AM", "subject": "Automatic Payment Plan Debit Initiated"}, {"account": "-", "caseNumber": "116355760", "closedDate": "3/17/2026 11:16 AM", "subject": "Message from Square"}, {"account": "Miracle Center International Ministry", "caseNumber": "116358393", "closedDate": "3/17/2026 11:29 AM", "subject": "Maturity Debit Initiated"}, {"account": "Out Of The Barn", "caseNumber": "116389371", "closedDate": "3/17/2026 11:53 AM", "subject": "Message from Square"}, {"account": "Melissa Cooper", "caseNumber": "116390049", "closedDate": "3/17/2026 11:56 AM", "subject": "Message from Square"}, {"account": "Braided Honey Beauty Bar", "caseNumber": "116391295", "closedDate": "3/17/2026 12:03 PM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116304800", "closedDate": "3/17/2026 12:12 PM", "subject": "Re: [Urgent: Action Required] Link a bank for upcoming loan payment."}]}, {"name": "Julia Ye", "count": 25, "cases": [{"account": "Diversity Hair Lounge LLC", "caseNumber": "116346947", "closedDate": "3/17/2026 8:23 AM", "subject": "Loan Maturity Collections Payment Plan"}, {"account": "Aztec Daves", "caseNumber": "115843782", "closedDate": "3/17/2026 8:35 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Blended Bowl", "caseNumber": "116294939", "closedDate": "3/17/2026 8:37 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Babai Bandi", "caseNumber": "116118388", "closedDate": "3/17/2026 8:47 AM", "subject": "Maturity Debit Failed"}, {"account": "Twisted Scissorz salon", "caseNumber": "116193022", "closedDate": "3/17/2026 9:01 AM", "subject": "Maturity Debit Initiated"}, {"account": "Terra Marketing", "caseNumber": "116399932", "closedDate": "3/17/2026 9:02 AM", "subject": "Message from Square"}, {"account": "The Wild Pear Co.", "caseNumber": "116009427", "closedDate": "3/17/2026 9:40 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Old Fort Brewing Company", "caseNumber": "116395417", "closedDate": "3/17/2026 9:43 AM", "subject": "Message from Square"}, {"account": "J&A Strong Enterprises LLC", "caseNumber": "116311873", "closedDate": "3/17/2026 9:56 AM", "subject": "Message from Square"}, {"account": "A Royal Clean, LLC.", "caseNumber": "116400619", "closedDate": "3/17/2026 10:00 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116308414", "closedDate": "3/17/2026 10:06 AM", "subject": "Loan"}, {"account": "Johnsons Auto Service", "caseNumber": "116338544", "closedDate": "3/17/2026 10:24 AM", "subject": "Message from Square"}, {"account": "Masters Generator And Electrical Service", "caseNumber": "116305308", "closedDate": "3/17/2026 10:30 AM", "subject": "Message from Square"}, {"account": "Lorraine's Seafood Restaurant", "caseNumber": "116350509", "closedDate": "3/17/2026 10:37 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116360459", "closedDate": "3/17/2026 10:59 AM", "subject": "Message from Square"}, {"account": "Quality Care at Home", "caseNumber": "116368347", "closedDate": "3/17/2026 11:10 AM", "subject": "Maturity Debit Initiated"}, {"account": "Kanobi Candle Co.", "caseNumber": "116192545", "closedDate": "3/17/2026 11:15 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Wingen Bakery", "caseNumber": "116210242", "closedDate": "3/17/2026 11:23 AM", "subject": "Payment Plan Completed"}, {"account": "Love Me Lashes", "caseNumber": "116218114", "closedDate": "3/17/2026 11:26 AM", "subject": "Message from Square"}, {"account": "Westfield Commerce & Services", "caseNumber": "116192787", "closedDate": "3/17/2026 11:28 AM", "subject": "Maturity Debit Initiated"}, {"account": "-", "caseNumber": "116300253", "closedDate": "3/17/2026 11:37 AM", "subject": "Message from Square"}, {"account": "Appliance Repair Service", "caseNumber": "116358184", "closedDate": "3/17/2026 12:05 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Hair by Jaelin", "caseNumber": "116369697", "closedDate": "3/17/2026 12:11 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Union Social House", "caseNumber": "116293454", "closedDate": "3/17/2026 12:15 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Aztec Daves", "caseNumber": "116314378", "closedDate": "3/17/2026 12:15 PM", "subject": "Payment Plan Confirmation"}]}, {"name": "Dominic Pardilla", "count": 11, "cases": [{"account": "Jazzed LLC", "caseNumber": "116080908", "closedDate": "3/17/2026 9:46 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Shay's Boutique", "caseNumber": "116269137", "closedDate": "3/17/2026 9:51 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116289766", "closedDate": "3/17/2026 10:08 AM", "subject": "Message from Square"}, {"account": "Sequoia Massage Therapy", "caseNumber": "116315643", "closedDate": "3/17/2026 10:11 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Winfield Flooring", "caseNumber": "116316635", "closedDate": "3/17/2026 10:16 AM", "subject": "Message from Square"}, {"account": "Texi", "caseNumber": "116316868", "closedDate": "3/17/2026 10:18 AM", "subject": "Automatic Payment Plan Debit Failed"}, {"account": "Penne For Your Thoughts LLC", "caseNumber": "116355215", "closedDate": "3/17/2026 10:45 AM", "subject": "Message from Square"}, {"account": "P&P Events", "caseNumber": "116224694", "closedDate": "3/17/2026 11:02 AM", "subject": "Maturity Debit Failed"}, {"account": "Chem Dry Fair Oaks Folsom", "caseNumber": "116385798", "closedDate": "3/17/2026 11:35 AM", "subject": "Past Due Collections Prior 5 Days"}, {"account": "V&J Luxury Car Service", "caseNumber": "116386167", "closedDate": "3/17/2026 12:00 PM", "subject": "Past Due Collections Prior 10 Days"}, {"account": "Elite day spa", "caseNumber": "116393011", "closedDate": "3/17/2026 12:10 PM", "subject": "Message from Square"}]}, {"name": "Nikko Illastron", "count": 7, "cases": [{"account": "Taste This! With or Without Sauce", "caseNumber": "116111449", "closedDate": "3/17/2026 10:43 AM", "subject": "Maturity Debit Failed"}, {"account": "Vanessa Michelle Artistry", "caseNumber": "114943449", "closedDate": "3/17/2026 11:05 AM", "subject": "Maturity Debit Failed"}, {"account": "-", "caseNumber": "116241339", "closedDate": "3/17/2026 11:35 AM", "subject": "Message from Square"}, {"account": "Halsted Street Dawgs", "caseNumber": "115836433", "closedDate": "3/17/2026 11:38 AM", "subject": "Message from Square"}, {"account": "Chik'n And Mi", "caseNumber": "116198318", "closedDate": "3/17/2026 10:51 AM", "subject": "Message from Square"}, {"account": "Formerly Point Break Tacos", "caseNumber": "114557121", "closedDate": "3/17/2026 11:09 AM", "subject": "Message from Square"}, {"account": "Hair by Kelli", "caseNumber": "116342492", "closedDate": "3/17/2026 11:34 AM", "subject": "Message from Square"}]}, {"name": "Ayana Fabillaran Mendoza", "count": 6, "cases": [{"account": "Mocha Joe's Cafe", "caseNumber": "116201384", "closedDate": "3/17/2026 10:10 AM", "subject": "Message from Square"}, {"account": "Brynn and Apple Soap", "caseNumber": "116318590", "closedDate": "3/17/2026 11:27 AM", "subject": "Maturity Nondebitable"}, {"account": "-", "caseNumber": "116360191", "closedDate": "3/17/2026 11:30 AM", "subject": "New Products at Rudy's Christmas Trees and A TO Z Party Rentals OC 949-945-4800"}, {"account": "-", "caseNumber": "116360195", "closedDate": "3/17/2026 11:30 AM", "subject": "New Products at Rudy's Christmas Trees and A TO Z Party Rentals OC 949-945-4800"}, {"account": "Salon DeStyle", "caseNumber": "116380148", "closedDate": "3/17/2026 11:31 AM", "subject": "Message from Square"}, {"account": "BeggsBeauty", "caseNumber": "116331225", "closedDate": "3/17/2026 11:41 AM", "subject": "Message from Square"}]}, {"name": "Evelyn Ruiz", "count": 2, "cases": [{"account": "Chicago Car Sevices", "caseNumber": "116286513", "closedDate": "3/17/2026 10:20 AM", "subject": "Maturity Debit Reminder 10 Day Partial Unlinked"}, {"account": "Provision Smart Security LLC", "caseNumber": "116181827", "closedDate": "3/17/2026 11:55 AM", "subject": "Maturity Upcoming Debit Reminder Unlinked"}]}, {"name": "Ajaia Gates", "count": 1, "cases": [{"account": "Prestige Body Sculpting Services", "caseNumber": "116251321", "closedDate": "3/17/2026 11:35 AM", "subject": "Message from Square"}]}, {"name": "Branden Wegner", "count": 1, "cases": [{"account": "Bowman Fish Inc", "caseNumber": "116425920", "closedDate": "3/17/2026 11:42 AM", "subject": "Message from Square"}]}, {"name": "Angela Bautista", "count": 0, "cases": []}, {"name": "Nicholas Padilla", "count": 0, "cases": []}];
+const queueData = {"Ajaia Gates": 33, "Ayana Fabillaran Mendoza": 25, "Evelyn Ruiz": 24, "Nicholas Padilla": 17, "Nikko Illastron": 15, "Branden Wegner": 14, "Julia Ye": 13, "Dominic Pardilla": 7, "Janai Djerbi": 5};
 const SFBASE = "https://squareinc.lightning.force.com/lightning/r/Case/";
 
 // Build case-insensitive lookup for queue counts
@@ -1446,9 +1566,9 @@ function getQueue(name) {
 // ============================================================
 // === DRI Work Tab ===
 // ============================================================
-const driDaily = [];
-const driWeekly = [];
-const driPeople = [];
+const driDaily = [{"date": "Jan 01", "count": 2, "submitted": 2, "dow": "Thu", "key": "2026-01-01"}, {"date": "Jan 02", "count": 11, "submitted": 11, "dow": "Fri", "key": "2026-01-02"}, {"date": "Jan 03", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-01-03"}, {"date": "Jan 04", "count": 1, "submitted": 1, "dow": "Sun", "key": "2026-01-04"}, {"date": "Jan 05", "count": 15, "submitted": 15, "dow": "Mon", "key": "2026-01-05"}, {"date": "Jan 06", "count": 14, "submitted": 14, "dow": "Tue", "key": "2026-01-06"}, {"date": "Jan 07", "count": 19, "submitted": 19, "dow": "Wed", "key": "2026-01-07"}, {"date": "Jan 08", "count": 6, "submitted": 6, "dow": "Thu", "key": "2026-01-08"}, {"date": "Jan 09", "count": 21, "submitted": 21, "dow": "Fri", "key": "2026-01-09"}, {"date": "Jan 10", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-01-10"}, {"date": "Jan 11", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-01-11"}, {"date": "Jan 12", "count": 13, "submitted": 13, "dow": "Mon", "key": "2026-01-12"}, {"date": "Jan 13", "count": 19, "submitted": 19, "dow": "Tue", "key": "2026-01-13"}, {"date": "Jan 14", "count": 13, "submitted": 13, "dow": "Wed", "key": "2026-01-14"}, {"date": "Jan 15", "count": 18, "submitted": 18, "dow": "Thu", "key": "2026-01-15"}, {"date": "Jan 16", "count": 12, "submitted": 12, "dow": "Fri", "key": "2026-01-16"}, {"date": "Jan 17", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-01-17"}, {"date": "Jan 18", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-01-18"}, {"date": "Jan 19", "count": 1, "submitted": 1, "dow": "Mon", "key": "2026-01-19"}, {"date": "Jan 20", "count": 26, "submitted": 26, "dow": "Tue", "key": "2026-01-20"}, {"date": "Jan 21", "count": 18, "submitted": 18, "dow": "Wed", "key": "2026-01-21"}, {"date": "Jan 22", "count": 12, "submitted": 12, "dow": "Thu", "key": "2026-01-22"}, {"date": "Jan 23", "count": 26, "submitted": 26, "dow": "Fri", "key": "2026-01-23"}, {"date": "Jan 24", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-01-24"}, {"date": "Jan 25", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-01-25"}, {"date": "Jan 26", "count": 14, "submitted": 14, "dow": "Mon", "key": "2026-01-26"}, {"date": "Jan 27", "count": 18, "submitted": 18, "dow": "Tue", "key": "2026-01-27"}, {"date": "Jan 28", "count": 15, "submitted": 15, "dow": "Wed", "key": "2026-01-28"}, {"date": "Jan 29", "count": 14, "submitted": 14, "dow": "Thu", "key": "2026-01-29"}, {"date": "Jan 30", "count": 12, "submitted": 12, "dow": "Fri", "key": "2026-01-30"}, {"date": "Jan 31", "count": 1, "submitted": 1, "dow": "Sat", "key": "2026-01-31"}, {"date": "Feb 01", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-02-01"}, {"date": "Feb 02", "count": 17, "submitted": 17, "dow": "Mon", "key": "2026-02-02"}, {"date": "Feb 03", "count": 17, "submitted": 17, "dow": "Tue", "key": "2026-02-03"}, {"date": "Feb 04", "count": 11, "submitted": 11, "dow": "Wed", "key": "2026-02-04"}, {"date": "Feb 05", "count": 18, "submitted": 18, "dow": "Thu", "key": "2026-02-05"}, {"date": "Feb 06", "count": 14, "submitted": 14, "dow": "Fri", "key": "2026-02-06"}, {"date": "Feb 07", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-02-07"}, {"date": "Feb 08", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-02-08"}, {"date": "Feb 09", "count": 10, "submitted": 10, "dow": "Mon", "key": "2026-02-09"}, {"date": "Feb 10", "count": 10, "submitted": 10, "dow": "Tue", "key": "2026-02-10"}, {"date": "Feb 11", "count": 6, "submitted": 6, "dow": "Wed", "key": "2026-02-11"}, {"date": "Feb 12", "count": 12, "submitted": 12, "dow": "Thu", "key": "2026-02-12"}, {"date": "Feb 13", "count": 11, "submitted": 11, "dow": "Fri", "key": "2026-02-13"}, {"date": "Feb 14", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-02-14"}, {"date": "Feb 15", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-02-15"}, {"date": "Feb 16", "count": 1, "submitted": 1, "dow": "Mon", "key": "2026-02-16"}, {"date": "Feb 17", "count": 8, "submitted": 8, "dow": "Tue", "key": "2026-02-17"}, {"date": "Feb 18", "count": 6, "submitted": 6, "dow": "Wed", "key": "2026-02-18"}, {"date": "Feb 19", "count": 2, "submitted": 2, "dow": "Thu", "key": "2026-02-19"}, {"date": "Feb 20", "count": 12, "submitted": 12, "dow": "Fri", "key": "2026-02-20"}, {"date": "Feb 21", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-02-21"}, {"date": "Feb 22", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-02-22"}, {"date": "Feb 23", "count": 8, "submitted": 8, "dow": "Mon", "key": "2026-02-23"}, {"date": "Feb 24", "count": 9, "submitted": 9, "dow": "Tue", "key": "2026-02-24"}, {"date": "Feb 25", "count": 12, "submitted": 12, "dow": "Wed", "key": "2026-02-25"}, {"date": "Feb 26", "count": 6, "submitted": 6, "dow": "Thu", "key": "2026-02-26"}, {"date": "Feb 27", "count": 6, "submitted": 6, "dow": "Fri", "key": "2026-02-27"}, {"date": "Feb 28", "count": 1, "submitted": 1, "dow": "Sat", "key": "2026-02-28"}, {"date": "Mar 01", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-03-01"}, {"date": "Mar 02", "count": 9, "submitted": 9, "dow": "Mon", "key": "2026-03-02"}, {"date": "Mar 03", "count": 11, "submitted": 11, "dow": "Tue", "key": "2026-03-03"}, {"date": "Mar 04", "count": 5, "submitted": 5, "dow": "Wed", "key": "2026-03-04"}, {"date": "Mar 05", "count": 9, "submitted": 9, "dow": "Thu", "key": "2026-03-05"}, {"date": "Mar 06", "count": 9, "submitted": 9, "dow": "Fri", "key": "2026-03-06"}, {"date": "Mar 07", "count": 0, "submitted": 0, "dow": "Sat", "key": "2026-03-07"}, {"date": "Mar 08", "count": 2, "submitted": 2, "dow": "Sun", "key": "2026-03-08"}, {"date": "Mar 09", "count": 3, "submitted": 3, "dow": "Mon", "key": "2026-03-09"}, {"date": "Mar 10", "count": 10, "submitted": 10, "dow": "Tue", "key": "2026-03-10"}, {"date": "Mar 11", "count": 4, "submitted": 4, "dow": "Wed", "key": "2026-03-11"}, {"date": "Mar 12", "count": 10, "submitted": 10, "dow": "Thu", "key": "2026-03-12"}, {"date": "Mar 13", "count": 6, "submitted": 6, "dow": "Fri", "key": "2026-03-13"}, {"date": "Mar 14", "count": 1, "submitted": 1, "dow": "Sat", "key": "2026-03-14"}, {"date": "Mar 15", "count": 0, "submitted": 0, "dow": "Sun", "key": "2026-03-15"}, {"date": "Mar 16", "count": 11, "submitted": 11, "dow": "Mon", "key": "2026-03-16"}, {"date": "Mar 17", "count": 4, "submitted": 4, "dow": "Tue", "key": "2026-03-17"}];
+const driWeekly = [{"week": "Dec 29", "count": 14, "submitted": 14, "key": "2025-12-29"}, {"week": "Jan 05", "count": 75, "submitted": 75, "key": "2026-01-05"}, {"week": "Jan 12", "count": 75, "submitted": 75, "key": "2026-01-12"}, {"week": "Jan 19", "count": 83, "submitted": 83, "key": "2026-01-19"}, {"week": "Jan 26", "count": 74, "submitted": 74, "key": "2026-01-26"}, {"week": "Feb 02", "count": 77, "submitted": 77, "key": "2026-02-02"}, {"week": "Feb 09", "count": 49, "submitted": 49, "key": "2026-02-09"}, {"week": "Feb 16", "count": 29, "submitted": 29, "key": "2026-02-16"}, {"week": "Feb 23", "count": 42, "submitted": 42, "key": "2026-02-23"}, {"week": "Mar 02", "count": 45, "submitted": 45, "key": "2026-03-02"}, {"week": "Mar 09", "count": 34, "submitted": 34, "key": "2026-03-09"}, {"week": "Mar 16", "count": 15, "submitted": 15, "key": "2026-03-16"}];
+const driPeople = [{"name": "Evelyn Ruiz", "total": 248, "daily": [0, 1, 0, 1, 14, 11, 14, 3, 13, 0, 0, 5, 8, 5, 7, 5, 0, 0, 1, 10, 10, 3, 8, 0, 0, 5, 3, 1, 1, 1, 0, 0, 6, 3, 5, 3, 0, 0, 0, 3, 4, 2, 1, 7, 0, 0, 1, 0, 1, 1, 4, 0, 0, 4, 4, 9, 2, 3, 1, 0, 5, 6, 3, 4, 2, 0, 2, 2, 5, 1, 4, 6, 1, 0, 9, 4], "weekly": [2, 55, 30, 32, 11, 17, 17, 7, 23, 22, 19, 13]}, {"name": "Angela Bautista", "total": 227, "daily": [2, 6, 0, 0, 0, 0, 0, 1, 2, 0, 0, 4, 4, 6, 8, 6, 0, 0, 0, 7, 6, 3, 16, 0, 0, 6, 8, 9, 7, 7, 1, 0, 11, 14, 2, 11, 9, 0, 0, 0, 2, 4, 7, 4, 0, 0, 0, 6, 1, 1, 5, 0, 0, 4, 5, 3, 4, 3, 0, 0, 4, 5, 1, 5, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [8, 3, 28, 32, 38, 47, 17, 13, 19, 22, 0, 0]}, {"name": "Branden Wegner", "total": 14, "daily": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 5, 0, 0, 0, 1, 0], "weekly": [1, 0, 0, 0, 1, 2, 1, 2, 0, 0, 6, 1]}, {"name": "Nikko Illastron", "total": 5, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 3, 0]}, {"name": "Dominic Pardilla", "total": 5, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 1, 0, 0, 3, 0, 1, 0, 0]}, {"name": "JaNai Djerbi", "total": 4, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 1, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1]}, {"name": "Ayana Fabillaran Mendoza", "total": 3, "daily": [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0], "weekly": [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]}, {"name": "Nicholas Padilla", "total": 3, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0]}, {"name": "Julia Ye", "total": 0, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"name": "Ajaia Gates", "total": 0, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}];
 
 // Shared visibility state for both DRI charts
 const driVis = { 'sub': true, 'res': true };
@@ -1492,7 +1612,10 @@ function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(val, pad.left - 8, y + 4);
     }
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w, dashed) {
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dashed || []);
@@ -1520,6 +1643,10 @@ function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillStyle = grad; ctx.fill();
     }
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
     driPeople.forEach((p, idx) => {
       if (!driVis['p'+idx]) return;
       const c = PERSON_COLORS[idx % PERSON_COLORS.length];
@@ -1546,10 +1673,11 @@ function driChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) { canvas.title = ''; return; }
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\n';
@@ -1761,9 +1889,9 @@ window.addEventListener('resize', () => {
 // ============================================================
 // === Bankruptcy Cases Sub-tab ===
 // ============================================================
-const bkDaily = [];
-const bkWeekly = [];
-const bkPeople = [];
+const bkDaily = [{"date": "Jan 02", "count": 26, "dow": "Fri", "key": "2026-01-02"}, {"date": "Jan 03", "count": 0, "dow": "Sat", "key": "2026-01-03"}, {"date": "Jan 04", "count": 0, "dow": "Sun", "key": "2026-01-04"}, {"date": "Jan 05", "count": 13, "dow": "Mon", "key": "2026-01-05"}, {"date": "Jan 06", "count": 30, "dow": "Tue", "key": "2026-01-06"}, {"date": "Jan 07", "count": 9, "dow": "Wed", "key": "2026-01-07"}, {"date": "Jan 08", "count": 21, "dow": "Thu", "key": "2026-01-08"}, {"date": "Jan 09", "count": 35, "dow": "Fri", "key": "2026-01-09"}, {"date": "Jan 10", "count": 0, "dow": "Sat", "key": "2026-01-10"}, {"date": "Jan 11", "count": 0, "dow": "Sun", "key": "2026-01-11"}, {"date": "Jan 12", "count": 31, "dow": "Mon", "key": "2026-01-12"}, {"date": "Jan 13", "count": 28, "dow": "Tue", "key": "2026-01-13"}, {"date": "Jan 14", "count": 5, "dow": "Wed", "key": "2026-01-14"}, {"date": "Jan 15", "count": 22, "dow": "Thu", "key": "2026-01-15"}, {"date": "Jan 16", "count": 37, "dow": "Fri", "key": "2026-01-16"}, {"date": "Jan 17", "count": 0, "dow": "Sat", "key": "2026-01-17"}, {"date": "Jan 18", "count": 0, "dow": "Sun", "key": "2026-01-18"}, {"date": "Jan 19", "count": 0, "dow": "Mon", "key": "2026-01-19"}, {"date": "Jan 20", "count": 2, "dow": "Tue", "key": "2026-01-20"}, {"date": "Jan 21", "count": 17, "dow": "Wed", "key": "2026-01-21"}, {"date": "Jan 22", "count": 19, "dow": "Thu", "key": "2026-01-22"}, {"date": "Jan 23", "count": 23, "dow": "Fri", "key": "2026-01-23"}, {"date": "Jan 24", "count": 0, "dow": "Sat", "key": "2026-01-24"}, {"date": "Jan 25", "count": 0, "dow": "Sun", "key": "2026-01-25"}, {"date": "Jan 26", "count": 21, "dow": "Mon", "key": "2026-01-26"}, {"date": "Jan 27", "count": 35, "dow": "Tue", "key": "2026-01-27"}, {"date": "Jan 28", "count": 14, "dow": "Wed", "key": "2026-01-28"}, {"date": "Jan 29", "count": 12, "dow": "Thu", "key": "2026-01-29"}, {"date": "Jan 30", "count": 44, "dow": "Fri", "key": "2026-01-30"}, {"date": "Jan 31", "count": 0, "dow": "Sat", "key": "2026-01-31"}, {"date": "Feb 01", "count": 0, "dow": "Sun", "key": "2026-02-01"}, {"date": "Feb 02", "count": 3, "dow": "Mon", "key": "2026-02-02"}, {"date": "Feb 03", "count": 12, "dow": "Tue", "key": "2026-02-03"}, {"date": "Feb 04", "count": 26, "dow": "Wed", "key": "2026-02-04"}, {"date": "Feb 05", "count": 17, "dow": "Thu", "key": "2026-02-05"}, {"date": "Feb 06", "count": 7, "dow": "Fri", "key": "2026-02-06"}, {"date": "Feb 07", "count": 0, "dow": "Sat", "key": "2026-02-07"}, {"date": "Feb 08", "count": 0, "dow": "Sun", "key": "2026-02-08"}, {"date": "Feb 09", "count": 11, "dow": "Mon", "key": "2026-02-09"}, {"date": "Feb 10", "count": 20, "dow": "Tue", "key": "2026-02-10"}, {"date": "Feb 11", "count": 37, "dow": "Wed", "key": "2026-02-11"}, {"date": "Feb 12", "count": 25, "dow": "Thu", "key": "2026-02-12"}, {"date": "Feb 13", "count": 11, "dow": "Fri", "key": "2026-02-13"}, {"date": "Feb 14", "count": 0, "dow": "Sat", "key": "2026-02-14"}, {"date": "Feb 15", "count": 0, "dow": "Sun", "key": "2026-02-15"}, {"date": "Feb 16", "count": 0, "dow": "Mon", "key": "2026-02-16"}, {"date": "Feb 17", "count": 27, "dow": "Tue", "key": "2026-02-17"}, {"date": "Feb 18", "count": 7, "dow": "Wed", "key": "2026-02-18"}, {"date": "Feb 19", "count": 19, "dow": "Thu", "key": "2026-02-19"}, {"date": "Feb 20", "count": 16, "dow": "Fri", "key": "2026-02-20"}, {"date": "Feb 21", "count": 0, "dow": "Sat", "key": "2026-02-21"}, {"date": "Feb 22", "count": 0, "dow": "Sun", "key": "2026-02-22"}, {"date": "Feb 23", "count": 7, "dow": "Mon", "key": "2026-02-23"}, {"date": "Feb 24", "count": 17, "dow": "Tue", "key": "2026-02-24"}, {"date": "Feb 25", "count": 19, "dow": "Wed", "key": "2026-02-25"}, {"date": "Feb 26", "count": 17, "dow": "Thu", "key": "2026-02-26"}, {"date": "Feb 27", "count": 18, "dow": "Fri", "key": "2026-02-27"}, {"date": "Feb 28", "count": 0, "dow": "Sat", "key": "2026-02-28"}, {"date": "Mar 01", "count": 0, "dow": "Sun", "key": "2026-03-01"}, {"date": "Mar 02", "count": 10, "dow": "Mon", "key": "2026-03-02"}, {"date": "Mar 03", "count": 17, "dow": "Tue", "key": "2026-03-03"}, {"date": "Mar 04", "count": 29, "dow": "Wed", "key": "2026-03-04"}, {"date": "Mar 05", "count": 15, "dow": "Thu", "key": "2026-03-05"}, {"date": "Mar 06", "count": 16, "dow": "Fri", "key": "2026-03-06"}, {"date": "Mar 07", "count": 0, "dow": "Sat", "key": "2026-03-07"}, {"date": "Mar 08", "count": 0, "dow": "Sun", "key": "2026-03-08"}, {"date": "Mar 09", "count": 30, "dow": "Mon", "key": "2026-03-09"}, {"date": "Mar 10", "count": 11, "dow": "Tue", "key": "2026-03-10"}, {"date": "Mar 11", "count": 23, "dow": "Wed", "key": "2026-03-11"}, {"date": "Mar 12", "count": 43, "dow": "Thu", "key": "2026-03-12"}, {"date": "Mar 13", "count": 12, "dow": "Fri", "key": "2026-03-13"}, {"date": "Mar 14", "count": 0, "dow": "Sat", "key": "2026-03-14"}, {"date": "Mar 15", "count": 0, "dow": "Sun", "key": "2026-03-15"}, {"date": "Mar 16", "count": 10, "dow": "Mon", "key": "2026-03-16"}, {"date": "Mar 17", "count": 9, "dow": "Tue", "key": "2026-03-17"}];
+const bkWeekly = [{"week": "Dec 29", "count": 26, "key": "2025-12-29"}, {"week": "Jan 05", "count": 108, "key": "2026-01-05"}, {"week": "Jan 12", "count": 123, "key": "2026-01-12"}, {"week": "Jan 19", "count": 61, "key": "2026-01-19"}, {"week": "Jan 26", "count": 126, "key": "2026-01-26"}, {"week": "Feb 02", "count": 65, "key": "2026-02-02"}, {"week": "Feb 09", "count": 104, "key": "2026-02-09"}, {"week": "Feb 16", "count": 69, "key": "2026-02-16"}, {"week": "Feb 23", "count": 78, "key": "2026-02-23"}, {"week": "Mar 02", "count": 87, "key": "2026-03-02"}, {"week": "Mar 09", "count": 119, "key": "2026-03-09"}, {"week": "Mar 16", "count": 19, "key": "2026-03-16"}];
+const bkPeople = [{"name": "Dominic Pardilla", "total": 502, "daily": [13, 0, 0, 1, 22, 0, 20, 16, 0, 0, 21, 24, 0, 11, 23, 0, 0, 0, 2, 0, 11, 3, 0, 0, 13, 28, 9, 6, 30, 0, 0, 2, 8, 5, 8, 0, 0, 0, 10, 7, 32, 6, 4, 0, 0, 0, 12, 3, 13, 0, 0, 0, 1, 5, 9, 16, 7, 0, 0, 5, 12, 4, 7, 0, 0, 0, 22, 9, 12, 15, 0, 0, 0, 10, 5], "weekly": [13, 59, 79, 16, 86, 23, 59, 28, 38, 28, 58, 15]}, {"name": "Nikko Illastron", "total": 450, "daily": [12, 0, 0, 10, 7, 9, 1, 19, 0, 0, 10, 3, 5, 10, 14, 0, 0, 0, 0, 14, 8, 16, 0, 0, 8, 7, 5, 5, 14, 0, 0, 0, 4, 21, 8, 6, 0, 0, 1, 11, 5, 17, 7, 0, 0, 0, 15, 2, 5, 15, 0, 0, 6, 11, 8, 0, 10, 0, 0, 5, 4, 25, 8, 14, 0, 0, 8, 2, 11, 28, 12, 0, 0, 0, 4], "weekly": [12, 46, 42, 38, 39, 39, 41, 37, 35, 56, 61, 4]}, {"name": "Angela Bautista", "total": 22, "daily": [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [1, 2, 2, 3, 1, 2, 3, 2, 4, 2, 0, 0]}, {"name": "Evelyn Ruiz", "total": 11, "daily": [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 1, 0, 4, 0, 1, 1, 2, 1, 1, 0, 0]}];
 
 // Shared visibility state for BK charts
 const bkVis = { 'total': true };
@@ -1806,7 +1934,10 @@ function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(val, pad.left - 8, y + 4);
     }
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w) {
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
@@ -1834,6 +1965,10 @@ function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillStyle = grad; ctx.fill();
     }
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
     // Person lines
     bkPeople.forEach((p, idx) => {
       if (!bkVis['p'+idx]) return;
@@ -1858,10 +1993,11 @@ function bkChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) { canvas.title = ''; return; }
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\n';
@@ -2064,11 +2200,11 @@ window.addEventListener('resize', () => {
 // ============================================================
 // === Evasion Cases Tab — ML Evasion (Snowflake data) ===
 // ============================================================
-const mlDaily = [{"date": "Jan 01", "count": 0, "dow": "Thu", "key": "2026-01-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 02", "count": 113, "dow": "Fri", "key": "2026-01-02", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 84, "P2": 14, "P3": 0}, {"date": "Jan 03", "count": 7, "dow": "Sat", "key": "2026-01-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Jan 04", "count": 0, "dow": "Sun", "key": "2026-01-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 05", "count": 84, "dow": "Mon", "key": "2026-01-05", "MCA P1": 0, "MCA P2": 0, "NMI": 13, "P1": 71, "P2": 0, "P3": 0}, {"date": "Jan 06", "count": 98, "dow": "Tue", "key": "2026-01-06", "MCA P1": 0, "MCA P2": 1, "NMI": 0, "P1": 86, "P2": 11, "P3": 0}, {"date": "Jan 07", "count": 81, "dow": "Wed", "key": "2026-01-07", "MCA P1": 3, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 08", "count": 100, "dow": "Thu", "key": "2026-01-08", "MCA P1": 5, "MCA P2": 1, "NMI": 0, "P1": 59, "P2": 35, "P3": 0}, {"date": "Jan 09", "count": 71, "dow": "Fri", "key": "2026-01-09", "MCA P1": 7, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 4, "P3": 0}, {"date": "Jan 10", "count": 3, "dow": "Sat", "key": "2026-01-10", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 3, "P3": 0}, {"date": "Jan 11", "count": 0, "dow": "Sun", "key": "2026-01-11", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 12", "count": 98, "dow": "Mon", "key": "2026-01-12", "MCA P1": 0, "MCA P2": 1, "NMI": 4, "P1": 93, "P2": 0, "P3": 0}, {"date": "Jan 13", "count": 43, "dow": "Tue", "key": "2026-01-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 41, "P2": 0, "P3": 0}, {"date": "Jan 14", "count": 95, "dow": "Wed", "key": "2026-01-14", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 94, "P2": 0, "P3": 0}, {"date": "Jan 15", "count": 78, "dow": "Thu", "key": "2026-01-15", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 16", "count": 44, "dow": "Fri", "key": "2026-01-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 36, "P2": 8, "P3": 0}, {"date": "Jan 17", "count": 6, "dow": "Sat", "key": "2026-01-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 6, "P3": 0}, {"date": "Jan 18", "count": 0, "dow": "Sun", "key": "2026-01-18", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 19", "count": 6, "dow": "Mon", "key": "2026-01-19", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 6, "P2": 0, "P3": 0}, {"date": "Jan 20", "count": 82, "dow": "Tue", "key": "2026-01-20", "MCA P1": 1, "MCA P2": 1, "NMI": 0, "P1": 69, "P2": 11, "P3": 0}, {"date": "Jan 21", "count": 80, "dow": "Wed", "key": "2026-01-21", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 68, "P2": 2, "P3": 0}, {"date": "Jan 22", "count": 58, "dow": "Thu", "key": "2026-01-22", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 43, "P2": 14, "P3": 0}, {"date": "Jan 23", "count": 71, "dow": "Fri", "key": "2026-01-23", "MCA P1": 9, "MCA P2": 1, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Jan 24", "count": 5, "dow": "Sat", "key": "2026-01-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 5, "P2": 0, "P3": 0}, {"date": "Jan 25", "count": 0, "dow": "Sun", "key": "2026-01-25", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 26", "count": 124, "dow": "Mon", "key": "2026-01-26", "MCA P1": 0, "MCA P2": 0, "NMI": 20, "P1": 104, "P2": 0, "P3": 0}, {"date": "Jan 27", "count": 127, "dow": "Tue", "key": "2026-01-27", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 111, "P2": 15, "P3": 0}, {"date": "Jan 28", "count": 78, "dow": "Wed", "key": "2026-01-28", "MCA P1": 0, "MCA P2": 0, "NMI": 8, "P1": 22, "P2": 48, "P3": 0}, {"date": "Jan 29", "count": 42, "dow": "Thu", "key": "2026-01-29", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 41, "P2": 1, "P3": 0}, {"date": "Jan 30", "count": 86, "dow": "Fri", "key": "2026-01-30", "MCA P1": 15, "MCA P2": 0, "NMI": 0, "P1": 70, "P2": 1, "P3": 0}, {"date": "Jan 31", "count": 9, "dow": "Sat", "key": "2026-01-31", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 9, "P2": 0, "P3": 0}, {"date": "Feb 01", "count": 0, "dow": "Sun", "key": "2026-02-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 02", "count": 100, "dow": "Mon", "key": "2026-02-02", "MCA P1": 0, "MCA P2": 0, "NMI": 11, "P1": 87, "P2": 2, "P3": 0}, {"date": "Feb 03", "count": 53, "dow": "Tue", "key": "2026-02-03", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 49, "P2": 2, "P3": 0}, {"date": "Feb 04", "count": 55, "dow": "Wed", "key": "2026-02-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 47, "P2": 8, "P3": 0}, {"date": "Feb 05", "count": 61, "dow": "Thu", "key": "2026-02-05", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Feb 06", "count": 65, "dow": "Fri", "key": "2026-02-06", "MCA P1": 8, "MCA P2": 0, "NMI": 0, "P1": 56, "P2": 1, "P3": 0}, {"date": "Feb 07", "count": 0, "dow": "Sat", "key": "2026-02-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 08", "count": 0, "dow": "Sun", "key": "2026-02-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 09", "count": 89, "dow": "Mon", "key": "2026-02-09", "MCA P1": 4, "MCA P2": 1, "NMI": 4, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 10", "count": 107, "dow": "Tue", "key": "2026-02-10", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 90, "P2": 16, "P3": 0}, {"date": "Feb 11", "count": 87, "dow": "Wed", "key": "2026-02-11", "MCA P1": 0, "MCA P2": 0, "NMI": 5, "P1": 65, "P2": 17, "P3": 0}, {"date": "Feb 12", "count": 75, "dow": "Thu", "key": "2026-02-12", "MCA P1": 3, "MCA P2": 0, "NMI": 0, "P1": 40, "P2": 32, "P3": 0}, {"date": "Feb 13", "count": 74, "dow": "Fri", "key": "2026-02-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 57, "P2": 15, "P3": 0}, {"date": "Feb 14", "count": 0, "dow": "Sat", "key": "2026-02-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 15", "count": 0, "dow": "Sun", "key": "2026-02-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 16", "count": 8, "dow": "Mon", "key": "2026-02-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 1, "P3": 0}, {"date": "Feb 17", "count": 79, "dow": "Tue", "key": "2026-02-17", "MCA P1": 12, "MCA P2": 2, "NMI": 1, "P1": 61, "P2": 3, "P3": 0}, {"date": "Feb 18", "count": 84, "dow": "Wed", "key": "2026-02-18", "MCA P1": 10, "MCA P2": 0, "NMI": 6, "P1": 67, "P2": 1, "P3": 0}, {"date": "Feb 19", "count": 125, "dow": "Thu", "key": "2026-02-19", "MCA P1": 13, "MCA P2": 0, "NMI": 0, "P1": 81, "P2": 31, "P3": 0}, {"date": "Feb 20", "count": 111, "dow": "Fri", "key": "2026-02-20", "MCA P1": 0, "MCA P2": 0, "NMI": 14, "P1": 75, "P2": 22, "P3": 0}, {"date": "Feb 21", "count": 7, "dow": "Sat", "key": "2026-02-21", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Feb 22", "count": 0, "dow": "Sun", "key": "2026-02-22", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 23", "count": 70, "dow": "Mon", "key": "2026-02-23", "MCA P1": 0, "MCA P2": 0, "NMI": 4, "P1": 63, "P2": 3, "P3": 0}, {"date": "Feb 24", "count": 80, "dow": "Tue", "key": "2026-02-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 25", "count": 104, "dow": "Wed", "key": "2026-02-25", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 76, "P2": 27, "P3": 0}, {"date": "Feb 26", "count": 92, "dow": "Thu", "key": "2026-02-26", "MCA P1": 3, "MCA P2": 0, "NMI": 8, "P1": 60, "P2": 21, "P3": 0}, {"date": "Feb 27", "count": 72, "dow": "Fri", "key": "2026-02-27", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 38, "P2": 34, "P3": 0}, {"date": "Feb 28", "count": 4, "dow": "Sat", "key": "2026-02-28", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 3, "P3": 0}, {"date": "Mar 01", "count": 1, "dow": "Sun", "key": "2026-03-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 0, "P3": 0}, {"date": "Mar 02", "count": 87, "dow": "Mon", "key": "2026-03-02", "MCA P1": 0, "MCA P2": 0, "NMI": 6, "P1": 81, "P2": 0, "P3": 0}, {"date": "Mar 03", "count": 74, "dow": "Tue", "key": "2026-03-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 64, "P2": 10, "P3": 0}, {"date": "Mar 04", "count": 105, "dow": "Wed", "key": "2026-03-04", "MCA P1": 4, "MCA P2": 0, "NMI": 1, "P1": 94, "P2": 6, "P3": 0}, {"date": "Mar 05", "count": 120, "dow": "Thu", "key": "2026-03-05", "MCA P1": 4, "MCA P2": 1, "NMI": 8, "P1": 65, "P2": 42, "P3": 0}, {"date": "Mar 06", "count": 61, "dow": "Fri", "key": "2026-03-06", "MCA P1": 1, "MCA P2": 0, "NMI": 1, "P1": 14, "P2": 45, "P3": 0}, {"date": "Mar 07", "count": 0, "dow": "Sat", "key": "2026-03-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 08", "count": 0, "dow": "Sun", "key": "2026-03-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 09", "count": 64, "dow": "Mon", "key": "2026-03-09", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 60, "P2": 2, "P3": 0}, {"date": "Mar 10", "count": 73, "dow": "Tue", "key": "2026-03-10", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 68, "P2": 3, "P3": 1}, {"date": "Mar 11", "count": 11, "dow": "Wed", "key": "2026-03-11", "MCA P1": 9, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 2, "P3": 0}, {"date": "Mar 12", "count": 0, "dow": "Thu", "key": "2026-03-12", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 13", "count": 0, "dow": "Fri", "key": "2026-03-13", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 14", "count": 0, "dow": "Sat", "key": "2026-03-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 15", "count": 0, "dow": "Sun", "key": "2026-03-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 16", "count": 0, "dow": "Mon", "key": "2026-03-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}];
+const mlDaily = [{"date": "Jan 01", "count": 0, "dow": "Thu", "key": "2026-01-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 02", "count": 113, "dow": "Fri", "key": "2026-01-02", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 84, "P2": 14, "P3": 0}, {"date": "Jan 03", "count": 7, "dow": "Sat", "key": "2026-01-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Jan 04", "count": 0, "dow": "Sun", "key": "2026-01-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 05", "count": 84, "dow": "Mon", "key": "2026-01-05", "MCA P1": 0, "MCA P2": 0, "NMI": 13, "P1": 71, "P2": 0, "P3": 0}, {"date": "Jan 06", "count": 98, "dow": "Tue", "key": "2026-01-06", "MCA P1": 0, "MCA P2": 1, "NMI": 0, "P1": 86, "P2": 11, "P3": 0}, {"date": "Jan 07", "count": 81, "dow": "Wed", "key": "2026-01-07", "MCA P1": 3, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 08", "count": 100, "dow": "Thu", "key": "2026-01-08", "MCA P1": 5, "MCA P2": 1, "NMI": 0, "P1": 59, "P2": 35, "P3": 0}, {"date": "Jan 09", "count": 71, "dow": "Fri", "key": "2026-01-09", "MCA P1": 7, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 4, "P3": 0}, {"date": "Jan 10", "count": 3, "dow": "Sat", "key": "2026-01-10", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 3, "P3": 0}, {"date": "Jan 11", "count": 0, "dow": "Sun", "key": "2026-01-11", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 12", "count": 98, "dow": "Mon", "key": "2026-01-12", "MCA P1": 0, "MCA P2": 1, "NMI": 4, "P1": 93, "P2": 0, "P3": 0}, {"date": "Jan 13", "count": 43, "dow": "Tue", "key": "2026-01-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 41, "P2": 0, "P3": 0}, {"date": "Jan 14", "count": 95, "dow": "Wed", "key": "2026-01-14", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 94, "P2": 0, "P3": 0}, {"date": "Jan 15", "count": 78, "dow": "Thu", "key": "2026-01-15", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 16", "count": 44, "dow": "Fri", "key": "2026-01-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 36, "P2": 8, "P3": 0}, {"date": "Jan 17", "count": 6, "dow": "Sat", "key": "2026-01-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 6, "P3": 0}, {"date": "Jan 18", "count": 0, "dow": "Sun", "key": "2026-01-18", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 19", "count": 6, "dow": "Mon", "key": "2026-01-19", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 6, "P2": 0, "P3": 0}, {"date": "Jan 20", "count": 82, "dow": "Tue", "key": "2026-01-20", "MCA P1": 1, "MCA P2": 1, "NMI": 0, "P1": 69, "P2": 11, "P3": 0}, {"date": "Jan 21", "count": 80, "dow": "Wed", "key": "2026-01-21", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 68, "P2": 2, "P3": 0}, {"date": "Jan 22", "count": 58, "dow": "Thu", "key": "2026-01-22", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 43, "P2": 14, "P3": 0}, {"date": "Jan 23", "count": 71, "dow": "Fri", "key": "2026-01-23", "MCA P1": 9, "MCA P2": 1, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Jan 24", "count": 5, "dow": "Sat", "key": "2026-01-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 5, "P2": 0, "P3": 0}, {"date": "Jan 25", "count": 0, "dow": "Sun", "key": "2026-01-25", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 26", "count": 124, "dow": "Mon", "key": "2026-01-26", "MCA P1": 0, "MCA P2": 0, "NMI": 20, "P1": 104, "P2": 0, "P3": 0}, {"date": "Jan 27", "count": 127, "dow": "Tue", "key": "2026-01-27", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 111, "P2": 15, "P3": 0}, {"date": "Jan 28", "count": 78, "dow": "Wed", "key": "2026-01-28", "MCA P1": 0, "MCA P2": 0, "NMI": 8, "P1": 22, "P2": 48, "P3": 0}, {"date": "Jan 29", "count": 42, "dow": "Thu", "key": "2026-01-29", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 41, "P2": 1, "P3": 0}, {"date": "Jan 30", "count": 86, "dow": "Fri", "key": "2026-01-30", "MCA P1": 15, "MCA P2": 0, "NMI": 0, "P1": 70, "P2": 1, "P3": 0}, {"date": "Jan 31", "count": 9, "dow": "Sat", "key": "2026-01-31", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 9, "P2": 0, "P3": 0}, {"date": "Feb 01", "count": 0, "dow": "Sun", "key": "2026-02-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 02", "count": 100, "dow": "Mon", "key": "2026-02-02", "MCA P1": 0, "MCA P2": 0, "NMI": 11, "P1": 87, "P2": 2, "P3": 0}, {"date": "Feb 03", "count": 53, "dow": "Tue", "key": "2026-02-03", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 49, "P2": 2, "P3": 0}, {"date": "Feb 04", "count": 55, "dow": "Wed", "key": "2026-02-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 47, "P2": 8, "P3": 0}, {"date": "Feb 05", "count": 61, "dow": "Thu", "key": "2026-02-05", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Feb 06", "count": 65, "dow": "Fri", "key": "2026-02-06", "MCA P1": 8, "MCA P2": 0, "NMI": 0, "P1": 56, "P2": 1, "P3": 0}, {"date": "Feb 07", "count": 0, "dow": "Sat", "key": "2026-02-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 08", "count": 0, "dow": "Sun", "key": "2026-02-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 09", "count": 89, "dow": "Mon", "key": "2026-02-09", "MCA P1": 4, "MCA P2": 1, "NMI": 4, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 10", "count": 107, "dow": "Tue", "key": "2026-02-10", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 90, "P2": 16, "P3": 0}, {"date": "Feb 11", "count": 87, "dow": "Wed", "key": "2026-02-11", "MCA P1": 0, "MCA P2": 0, "NMI": 5, "P1": 65, "P2": 17, "P3": 0}, {"date": "Feb 12", "count": 75, "dow": "Thu", "key": "2026-02-12", "MCA P1": 3, "MCA P2": 0, "NMI": 0, "P1": 40, "P2": 32, "P3": 0}, {"date": "Feb 13", "count": 74, "dow": "Fri", "key": "2026-02-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 57, "P2": 15, "P3": 0}, {"date": "Feb 14", "count": 0, "dow": "Sat", "key": "2026-02-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 15", "count": 0, "dow": "Sun", "key": "2026-02-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 16", "count": 8, "dow": "Mon", "key": "2026-02-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 1, "P3": 0}, {"date": "Feb 17", "count": 79, "dow": "Tue", "key": "2026-02-17", "MCA P1": 12, "MCA P2": 2, "NMI": 1, "P1": 61, "P2": 3, "P3": 0}, {"date": "Feb 18", "count": 84, "dow": "Wed", "key": "2026-02-18", "MCA P1": 10, "MCA P2": 0, "NMI": 6, "P1": 67, "P2": 1, "P3": 0}, {"date": "Feb 19", "count": 125, "dow": "Thu", "key": "2026-02-19", "MCA P1": 13, "MCA P2": 0, "NMI": 0, "P1": 81, "P2": 31, "P3": 0}, {"date": "Feb 20", "count": 111, "dow": "Fri", "key": "2026-02-20", "MCA P1": 0, "MCA P2": 0, "NMI": 14, "P1": 75, "P2": 22, "P3": 0}, {"date": "Feb 21", "count": 7, "dow": "Sat", "key": "2026-02-21", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Feb 22", "count": 0, "dow": "Sun", "key": "2026-02-22", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 23", "count": 70, "dow": "Mon", "key": "2026-02-23", "MCA P1": 0, "MCA P2": 0, "NMI": 4, "P1": 63, "P2": 3, "P3": 0}, {"date": "Feb 24", "count": 80, "dow": "Tue", "key": "2026-02-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 25", "count": 104, "dow": "Wed", "key": "2026-02-25", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 76, "P2": 27, "P3": 0}, {"date": "Feb 26", "count": 92, "dow": "Thu", "key": "2026-02-26", "MCA P1": 3, "MCA P2": 0, "NMI": 8, "P1": 60, "P2": 21, "P3": 0}, {"date": "Feb 27", "count": 72, "dow": "Fri", "key": "2026-02-27", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 38, "P2": 34, "P3": 0}, {"date": "Feb 28", "count": 4, "dow": "Sat", "key": "2026-02-28", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 3, "P3": 0}, {"date": "Mar 01", "count": 1, "dow": "Sun", "key": "2026-03-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 0, "P3": 0}, {"date": "Mar 02", "count": 87, "dow": "Mon", "key": "2026-03-02", "MCA P1": 0, "MCA P2": 0, "NMI": 6, "P1": 81, "P2": 0, "P3": 0}, {"date": "Mar 03", "count": 74, "dow": "Tue", "key": "2026-03-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 64, "P2": 10, "P3": 0}, {"date": "Mar 04", "count": 105, "dow": "Wed", "key": "2026-03-04", "MCA P1": 4, "MCA P2": 0, "NMI": 1, "P1": 94, "P2": 6, "P3": 0}, {"date": "Mar 05", "count": 120, "dow": "Thu", "key": "2026-03-05", "MCA P1": 4, "MCA P2": 1, "NMI": 8, "P1": 65, "P2": 42, "P3": 0}, {"date": "Mar 06", "count": 61, "dow": "Fri", "key": "2026-03-06", "MCA P1": 1, "MCA P2": 0, "NMI": 1, "P1": 14, "P2": 45, "P3": 0}, {"date": "Mar 07", "count": 0, "dow": "Sat", "key": "2026-03-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 08", "count": 0, "dow": "Sun", "key": "2026-03-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 09", "count": 64, "dow": "Mon", "key": "2026-03-09", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 60, "P2": 2, "P3": 0}, {"date": "Mar 10", "count": 73, "dow": "Tue", "key": "2026-03-10", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 68, "P2": 3, "P3": 1}, {"date": "Mar 11", "count": 11, "dow": "Wed", "key": "2026-03-11", "MCA P1": 9, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 2, "P3": 0}, {"date": "Mar 12", "count": 0, "dow": "Thu", "key": "2026-03-12", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 13", "count": 0, "dow": "Fri", "key": "2026-03-13", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 14", "count": 0, "dow": "Sat", "key": "2026-03-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 15", "count": 0, "dow": "Sun", "key": "2026-03-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 16", "count": 0, "dow": "Mon", "key": "2026-03-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 17", "count": 0, "dow": "Tue", "key": "2026-03-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}];
 const mlWeekly = [{"week": "Dec 29", "count": 120, "key": "2025-12-29", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 91, "P2": 14, "P3": 0}, {"week": "Jan 05", "count": 437, "key": "2026-01-05", "MCA P1": 15, "MCA P2": 2, "NMI": 14, "P1": 349, "P2": 57, "P3": 0}, {"week": "Jan 12", "count": 364, "key": "2026-01-12", "MCA P1": 1, "MCA P2": 1, "NMI": 7, "P1": 337, "P2": 18, "P3": 0}, {"week": "Jan 19", "count": 302, "key": "2026-01-19", "MCA P1": 10, "MCA P2": 2, "NMI": 11, "P1": 251, "P2": 28, "P3": 0}, {"week": "Jan 26", "count": 466, "key": "2026-01-26", "MCA P1": 15, "MCA P2": 0, "NMI": 29, "P1": 357, "P2": 65, "P3": 0}, {"week": "Feb 02", "count": 334, "key": "2026-02-02", "MCA P1": 8, "MCA P2": 0, "NMI": 13, "P1": 299, "P2": 14, "P3": 0}, {"week": "Feb 09", "count": 432, "key": "2026-02-09", "MCA P1": 7, "MCA P2": 1, "NMI": 12, "P1": 325, "P2": 87, "P3": 0}, {"week": "Feb 16", "count": 414, "key": "2026-02-16", "MCA P1": 35, "MCA P2": 2, "NMI": 21, "P1": 298, "P2": 58, "P3": 0}, {"week": "Feb 23", "count": 423, "key": "2026-02-23", "MCA P1": 3, "MCA P2": 0, "NMI": 13, "P1": 312, "P2": 95, "P3": 0}, {"week": "Mar 02", "count": 447, "key": "2026-03-02", "MCA P1": 9, "MCA P2": 1, "NMI": 16, "P1": 318, "P2": 103, "P3": 0}, {"week": "Mar 09", "count": 148, "key": "2026-03-09", "MCA P1": 10, "MCA P2": 0, "NMI": 2, "P1": 128, "P2": 7, "P3": 1}, {"week": "Mar 16", "count": 0, "key": "2026-03-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}];
 const mlMonthly = [{"month": "Jan '26", "key": "2026-01", "total": 1689, "MCA P1": 53, "MCA P2": 8, "NMI": 61, "P1": 1385, "P2": 182, "P3": 0}, {"month": "Feb '26", "key": "2026-02", "total": 1602, "MCA P1": 53, "MCA P2": 3, "NMI": 59, "P1": 1233, "P2": 254, "P3": 0}, {"month": "Mar '26", "key": "2026-03", "total": 596, "MCA P1": 19, "MCA P2": 1, "NMI": 18, "P1": 447, "P2": 110, "P3": 1}];
 const mlQueues = ["MCA P1", "MCA P2", "NMI", "P1", "P2", "P3"];
-const mlPeople = [{"name": "Marivelle Solanzo", "total": 2674, "daily": [0, 66, 7, 0, 60, 68, 60, 64, 63, 3, 0, 76, 38, 75, 60, 41, 6, 0, 0, 58, 66, 50, 58, 5, 0, 40, 55, 39, 36, 63, 9, 0, 70, 40, 45, 52, 50, 0, 0, 62, 66, 63, 51, 61, 0, 0, 0, 40, 47, 75, 74, 7, 0, 48, 57, 69, 59, 53, 4, 0, 61, 60, 71, 63, 45, 0, 0, 57, 58, 0, 0, 0, 0, 0, 0], "weekly": [73, 318, 296, 237, 242, 257, 303, 243, 290, 300, 115, 0]}, {"name": "Greg Polander", "total": 227, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 4, 0, 0, 0, 64, 40, 25, 3, 7, 0, 0, 12, 5, 0, 2, 6, 0, 0, 3, 4, 4, 0, 2, 0, 0, 0, 5, 5, 0, 2, 0, 0, 2, 0, 2, 1, 4, 0, 1, 1, 7, 0, 5, 0, 0, 0, 5, 4, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 6, 139, 25, 13, 12, 10, 13, 9, 0]}, {"name": "Tayyaba Tareen", "total": 165, "daily": [0, 34, 0, 0, 9, 11, 9, 12, 0, 0, 0, 8, 0, 1, 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 13, 0, 0, 0, 0, 0, 0, 1, 22, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [34, 41, 9, 14, 6, 2, 13, 25, 0, 21, 0, 0]}, {"name": "Evelyn Ruiz", "total": 139, "daily": [0, 0, 0, 0, 1, 0, 8, 9, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 8, 1, 0, 0, 0, 10, 12, 11, 10, 0, 0, 14, 0, 16, 13, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 18, 10, 0, 0, 0, 4, 9, 43, 55, 0, 0]}, {"name": "George Nagano", "total": 135, "daily": [0, 8, 0, 0, 0, 8, 0, 5, 1, 0, 0, 0, 0, 11, 3, 3, 0, 0, 3, 0, 4, 3, 0, 0, 0, 0, 5, 5, 1, 0, 0, 0, 6, 0, 4, 4, 1, 0, 0, 3, 0, 5, 1, 0, 0, 0, 0, 6, 5, 0, 1, 0, 0, 6, 0, 3, 2, 3, 0, 0, 6, 5, 6, 0, 0, 0, 0, 0, 7, 1, 0, 0, 0, 0, 0], "weekly": [8, 14, 17, 10, 11, 15, 9, 12, 14, 17, 8, 0]}, {"name": "Nicholas Padilla", "total": 134, "daily": [0, 0, 0, 0, 13, 0, 1, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 20, 0, 1, 0, 0, 0, 0, 11, 1, 0, 0, 0, 0, 0, 4, 10, 0, 0, 2, 0, 0, 0, 4, 10, 0, 14, 0, 0, 4, 0, 0, 8, 0, 0, 0, 5, 0, 0, 8, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 14, 6, 10, 21, 12, 16, 28, 12, 13, 2, 0]}, {"name": "Daniel Wright", "total": 117, "daily": [0, 3, 0, 0, 1, 5, 2, 3, 0, 0, 0, 0, 3, 8, 14, 0, 0, 0, 3, 4, 0, 0, 3, 0, 0, 0, 5, 6, 2, 1, 0, 0, 1, 5, 6, 3, 0, 0, 0, 4, 0, 5, 3, 0, 0, 0, 7, 2, 0, 0, 4, 0, 0, 5, 0, 7, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [3, 11, 25, 10, 14, 15, 12, 13, 14, 0, 0, 0]}, {"name": "Julia Ye", "total": 102, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6, 17, 9, 0, 0, 0, 0, 3, 21, 8, 0, 0, 5, 7, 6, 0, 2, 0, 0, 0, 0, 5, 7, 0, 0, 0, 0, 3, 1, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 34, 32, 20, 12, 4, 0]}, {"name": "Samuel Gagn\u00e9", "total": 54, "daily": [0, 0, 0, 0, 0, 6, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 6, 7, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 7, 0, 0, 18, 0, 0, 23, 6, 0, 0, 0]}, {"name": "James Kensei Yonemura", "total": 47, "daily": [0, 2, 0, 0, 0, 0, 0, 4, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [2, 11, 0, 10, 8, 8, 3, 0, 0, 5, 0, 0]}, {"name": "Ayami Kurachi", "total": 35, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 7, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 2, 2, 4, 3, 0, 0, 0, 1, 9, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 11, 3, 11, 10, 0]}, {"name": "Angela Bautista", "total": 20, "daily": [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 3, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0]}, {"name": "Zachariah Barden", "total": 15, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 7, 0, 8, 0, 0, 0, 0, 0]}, {"name": "Janai Djerbi", "total": 12, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 6, 6, 0, 0, 0]}, {"name": "Dylan Rough", "total": 6, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0]}, {"name": "Branden Michael Wegner", "total": 5, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0]}];
+const mlPeople = [{"name": "Evelyn Ruiz", "total": 139, "daily": [0, 0, 0, 0, 1, 0, 8, 9, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 8, 1, 0, 0, 0, 10, 12, 11, 10, 0, 0, 14, 0, 16, 13, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 18, 10, 0, 0, 0, 4, 9, 43, 55, 0, 0]}, {"name": "Nicholas Padilla", "total": 134, "daily": [0, 0, 0, 0, 13, 0, 1, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 20, 0, 1, 0, 0, 0, 0, 11, 1, 0, 0, 0, 0, 0, 4, 10, 0, 0, 2, 0, 0, 0, 4, 10, 0, 14, 0, 0, 4, 0, 0, 8, 0, 0, 0, 5, 0, 0, 8, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 14, 6, 10, 21, 12, 16, 28, 12, 13, 2, 0]}, {"name": "Julia Ye", "total": 102, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6, 17, 9, 0, 0, 0, 0, 3, 21, 8, 0, 0, 5, 7, 6, 0, 2, 0, 0, 0, 0, 5, 7, 0, 0, 0, 0, 3, 1, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 34, 32, 20, 12, 4, 0]}, {"name": "Angela Bautista", "total": 20, "daily": [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 3, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0]}];
 
 const ML_QUEUE_COLORS = { P1: '#3b82f6', P2: '#f59e0b', P3: '#ef4444', NMI: '#8b5cf6', 'MCA P1': '#06b6d4', 'MCA P2': '#ec4899' };
 
@@ -2116,7 +2252,10 @@ function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(val, pad.left - 8, y + 4);
     }
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w) {
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
@@ -2143,6 +2282,10 @@ function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
       ctx.fillStyle = grad; ctx.fill();
     }
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
 
     // Person lines
     mlPeople.forEach((p, idx) => {
@@ -2176,10 +2319,11 @@ function mlChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) { canvas.title = ''; return; }
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\n';
@@ -2244,92 +2388,14 @@ function rebuildMlLegends() {
 }
 rebuildMlLegends();
 
-// ML Monthly Stacked Bar Chart (queue breakdown)
-(function() {
-  const canvas = document.getElementById('mlQueueChart');
-  if (!canvas || !mlMonthly.length) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-
-  window.drawMlQueueChart = function() {
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const W = rect.width; const H = 300;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-
-    const pad = { top: 24, right: 20, bottom: 48, left: 55 };
-    const cw = W - pad.left - pad.right;
-    const ch = H - pad.top - pad.bottom;
-    const n = mlMonthly.length;
-    if (n < 1) return;
-
-    const maxVal = Math.max(1, ...mlMonthly.map(d => d.total));
-    const yMax = Math.ceil(maxVal / 200) * 200 || 200;
-
-    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
-    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
-    for (let i = 0; i <= 5; i++) {
-      const val = Math.round(yMax * i / 5);
-      const y = pad.top + ch - (ch * i / 5);
-      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
-      ctx.fillText(val, pad.left - 8, y + 4);
-    }
-
-    const barW = Math.min(50, (cw / n) * 0.6);
-    const gap = cw / n;
-
-    mlMonthly.forEach((d, i) => {
-      const x = pad.left + i * gap + (gap - barW) / 2;
-      let yOff = 0;
-      mlQueues.forEach(q => {
-        const val = d[q] || 0;
-        const bh = (val / yMax) * ch;
-        const y = pad.top + ch - yOff - bh;
-        ctx.fillStyle = ML_QUEUE_COLORS[q] || '#666';
-        ctx.fillRect(x, y, barW, bh);
-        yOff += bh;
-      });
-      ctx.fillStyle = '#e4e4e7'; ctx.font = 'bold 10px -apple-system, sans-serif'; ctx.textAlign = 'center';
-      const topY = pad.top + ch - (d.total / yMax) * ch;
-      ctx.fillText(d.total, x + barW / 2, topY - 5);
-      ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif';
-      ctx.fillText(d.month, x + barW / 2, H - pad.bottom + 16);
-    });
-
-    // Legend
-    ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'left';
-    let lx = pad.left;
-    mlQueues.forEach(q => {
-      ctx.fillStyle = ML_QUEUE_COLORS[q] || '#666';
-      ctx.fillRect(lx, pad.top - 16, 10, 10);
-      ctx.fillStyle = '#a1a1aa';
-      ctx.fillText(q, lx + 14, pad.top - 7);
-      lx += ctx.measureText(q).width + 28;
-    });
-
-    canvas.onmousemove = function(e) {
-      const r = canvas.getBoundingClientRect();
-      const mx = e.clientX - r.left;
-      const idx = Math.floor((mx - pad.left) / gap);
-      if (idx < 0 || idx >= n) { canvas.title = ''; return; }
-      const d = mlMonthly[idx];
-      let tip = d.month + '\nTotal: ' + d.total + '\n';
-      mlQueues.forEach(q => { if (d[q]) tip += q + ': ' + d[q] + '\n'; });
-      canvas.title = tip.trim();
-    };
-  };
-  drawMlQueueChart();
-})();
 
 // ============================================================
 // === Evasion Cases Tab — Cap-Evasion Manual Reviews ===
 // ============================================================
-const evDaily = [];
-const evWeekly = [];
-const evPeople = [];
-const evBreakdown = [];
+const evDaily = [{"date": "Jan 01", "count": 0, "total": 0, "dow": "Thu", "key": "2026-01-01"}, {"date": "Jan 02", "count": 0, "total": 0, "dow": "Fri", "key": "2026-01-02"}, {"date": "Jan 03", "count": 0, "total": 0, "dow": "Sat", "key": "2026-01-03"}, {"date": "Jan 04", "count": 0, "total": 0, "dow": "Sun", "key": "2026-01-04"}, {"date": "Jan 05", "count": 0, "total": 0, "dow": "Mon", "key": "2026-01-05"}, {"date": "Jan 06", "count": 0, "total": 0, "dow": "Tue", "key": "2026-01-06"}, {"date": "Jan 07", "count": 0, "total": 0, "dow": "Wed", "key": "2026-01-07"}, {"date": "Jan 08", "count": 0, "total": 0, "dow": "Thu", "key": "2026-01-08"}, {"date": "Jan 09", "count": 0, "total": 0, "dow": "Fri", "key": "2026-01-09"}, {"date": "Jan 10", "count": 0, "total": 0, "dow": "Sat", "key": "2026-01-10"}, {"date": "Jan 11", "count": 0, "total": 0, "dow": "Sun", "key": "2026-01-11"}, {"date": "Jan 12", "count": 0, "total": 0, "dow": "Mon", "key": "2026-01-12"}, {"date": "Jan 13", "count": 0, "total": 0, "dow": "Tue", "key": "2026-01-13"}, {"date": "Jan 14", "count": 0, "total": 0, "dow": "Wed", "key": "2026-01-14"}, {"date": "Jan 15", "count": 0, "total": 0, "dow": "Thu", "key": "2026-01-15"}, {"date": "Jan 16", "count": 0, "total": 0, "dow": "Fri", "key": "2026-01-16"}, {"date": "Jan 17", "count": 0, "total": 0, "dow": "Sat", "key": "2026-01-17"}, {"date": "Jan 18", "count": 0, "total": 0, "dow": "Sun", "key": "2026-01-18"}, {"date": "Jan 19", "count": 0, "total": 0, "dow": "Mon", "key": "2026-01-19"}, {"date": "Jan 20", "count": 0, "total": 0, "dow": "Tue", "key": "2026-01-20"}, {"date": "Jan 21", "count": 0, "total": 0, "dow": "Wed", "key": "2026-01-21"}, {"date": "Jan 22", "count": 0, "total": 0, "dow": "Thu", "key": "2026-01-22"}, {"date": "Jan 23", "count": 9, "total": 18, "dow": "Fri", "key": "2026-01-23"}, {"date": "Jan 24", "count": 1, "total": 1, "dow": "Sat", "key": "2026-01-24"}, {"date": "Jan 25", "count": 0, "total": 0, "dow": "Sun", "key": "2026-01-25"}, {"date": "Jan 26", "count": 21, "total": 42, "dow": "Mon", "key": "2026-01-26"}, {"date": "Jan 27", "count": 32, "total": 52, "dow": "Tue", "key": "2026-01-27"}, {"date": "Jan 28", "count": 9, "total": 22, "dow": "Wed", "key": "2026-01-28"}, {"date": "Jan 29", "count": 32, "total": 52, "dow": "Thu", "key": "2026-01-29"}, {"date": "Jan 30", "count": 21, "total": 38, "dow": "Fri", "key": "2026-01-30"}, {"date": "Jan 31", "count": 1, "total": 4, "dow": "Sat", "key": "2026-01-31"}, {"date": "Feb 01", "count": 0, "total": 0, "dow": "Sun", "key": "2026-02-01"}, {"date": "Feb 02", "count": 7, "total": 19, "dow": "Mon", "key": "2026-02-02"}, {"date": "Feb 03", "count": 13, "total": 37, "dow": "Tue", "key": "2026-02-03"}, {"date": "Feb 04", "count": 5, "total": 7, "dow": "Wed", "key": "2026-02-04"}, {"date": "Feb 05", "count": 12, "total": 19, "dow": "Thu", "key": "2026-02-05"}, {"date": "Feb 06", "count": 0, "total": 6, "dow": "Fri", "key": "2026-02-06"}, {"date": "Feb 07", "count": 3, "total": 5, "dow": "Sat", "key": "2026-02-07"}, {"date": "Feb 08", "count": 0, "total": 0, "dow": "Sun", "key": "2026-02-08"}, {"date": "Feb 09", "count": 7, "total": 13, "dow": "Mon", "key": "2026-02-09"}, {"date": "Feb 10", "count": 8, "total": 17, "dow": "Tue", "key": "2026-02-10"}, {"date": "Feb 11", "count": 36, "total": 64, "dow": "Wed", "key": "2026-02-11"}, {"date": "Feb 12", "count": 7, "total": 17, "dow": "Thu", "key": "2026-02-12"}, {"date": "Feb 13", "count": 14, "total": 25, "dow": "Fri", "key": "2026-02-13"}, {"date": "Feb 14", "count": 2, "total": 5, "dow": "Sat", "key": "2026-02-14"}, {"date": "Feb 15", "count": 0, "total": 0, "dow": "Sun", "key": "2026-02-15"}, {"date": "Feb 16", "count": 0, "total": 0, "dow": "Mon", "key": "2026-02-16"}, {"date": "Feb 17", "count": 11, "total": 21, "dow": "Tue", "key": "2026-02-17"}, {"date": "Feb 18", "count": 9, "total": 22, "dow": "Wed", "key": "2026-02-18"}, {"date": "Feb 19", "count": 22, "total": 44, "dow": "Thu", "key": "2026-02-19"}, {"date": "Feb 20", "count": 10, "total": 19, "dow": "Fri", "key": "2026-02-20"}, {"date": "Feb 21", "count": 0, "total": 0, "dow": "Sat", "key": "2026-02-21"}, {"date": "Feb 22", "count": 0, "total": 0, "dow": "Sun", "key": "2026-02-22"}, {"date": "Feb 23", "count": 8, "total": 31, "dow": "Mon", "key": "2026-02-23"}, {"date": "Feb 24", "count": 24, "total": 47, "dow": "Tue", "key": "2026-02-24"}, {"date": "Feb 25", "count": 10, "total": 19, "dow": "Wed", "key": "2026-02-25"}, {"date": "Feb 26", "count": 9, "total": 21, "dow": "Thu", "key": "2026-02-26"}, {"date": "Feb 27", "count": 21, "total": 41, "dow": "Fri", "key": "2026-02-27"}, {"date": "Feb 28", "count": 0, "total": 0, "dow": "Sat", "key": "2026-02-28"}, {"date": "Mar 01", "count": 0, "total": 0, "dow": "Sun", "key": "2026-03-01"}, {"date": "Mar 02", "count": 9, "total": 13, "dow": "Mon", "key": "2026-03-02"}, {"date": "Mar 03", "count": 14, "total": 42, "dow": "Tue", "key": "2026-03-03"}, {"date": "Mar 04", "count": 20, "total": 36, "dow": "Wed", "key": "2026-03-04"}, {"date": "Mar 05", "count": 24, "total": 48, "dow": "Thu", "key": "2026-03-05"}, {"date": "Mar 06", "count": 21, "total": 32, "dow": "Fri", "key": "2026-03-06"}, {"date": "Mar 07", "count": 3, "total": 5, "dow": "Sat", "key": "2026-03-07"}, {"date": "Mar 08", "count": 0, "total": 0, "dow": "Sun", "key": "2026-03-08"}, {"date": "Mar 09", "count": 10, "total": 16, "dow": "Mon", "key": "2026-03-09"}, {"date": "Mar 10", "count": 10, "total": 16, "dow": "Tue", "key": "2026-03-10"}, {"date": "Mar 11", "count": 22, "total": 42, "dow": "Wed", "key": "2026-03-11"}, {"date": "Mar 12", "count": 14, "total": 23, "dow": "Thu", "key": "2026-03-12"}, {"date": "Mar 13", "count": 18, "total": 35, "dow": "Fri", "key": "2026-03-13"}, {"date": "Mar 14", "count": 0, "total": 0, "dow": "Sat", "key": "2026-03-14"}, {"date": "Mar 15", "count": 0, "total": 0, "dow": "Sun", "key": "2026-03-15"}, {"date": "Mar 16", "count": 10, "total": 17, "dow": "Mon", "key": "2026-03-16"}, {"date": "Mar 17", "count": 0, "total": 0, "dow": "Tue", "key": "2026-03-17"}];
+const evWeekly = [{"week": "Dec 29", "count": 0, "total": 0, "key": "2025-12-29"}, {"week": "Jan 05", "count": 0, "total": 0, "key": "2026-01-05"}, {"week": "Jan 12", "count": 0, "total": 0, "key": "2026-01-12"}, {"week": "Jan 19", "count": 10, "total": 19, "key": "2026-01-19"}, {"week": "Jan 26", "count": 116, "total": 210, "key": "2026-01-26"}, {"week": "Feb 02", "count": 40, "total": 93, "key": "2026-02-02"}, {"week": "Feb 09", "count": 74, "total": 141, "key": "2026-02-09"}, {"week": "Feb 16", "count": 52, "total": 106, "key": "2026-02-16"}, {"week": "Feb 23", "count": 72, "total": 159, "key": "2026-02-23"}, {"week": "Mar 02", "count": 91, "total": 176, "key": "2026-03-02"}, {"week": "Mar 09", "count": 74, "total": 132, "key": "2026-03-09"}, {"week": "Mar 16", "count": 10, "total": 17, "key": "2026-03-16"}];
+const evPeople = [{"name": "Nicholas Padilla", "total": 363, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 19, 38, 17, 23, 13, 4, 0, 12, 24, 2, 7, 6, 5, 0, 7, 8, 3, 0, 5, 2, 0, 0, 2, 4, 30, 5, 0, 0, 9, 18, 4, 11, 6, 0, 0, 7, 0, 0, 26, 14, 2, 0, 6, 1, 7, 5, 3, 0, 0, 0, 0], "weekly": [0, 0, 0, 8, 114, 56, 25, 41, 48, 49, 22, 0]}, {"name": "Angela Bautista", "total": 177, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 5, 0, 0, 15, 0, 0, 4, 3, 0, 3, 0, 0, 0, 0, 0, 34, 0, 6, 0, 0, 0, 0, 0, 4, 7, 0, 0, 0, 18, 0, 0, 25, 0, 0, 2, 10, 20, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 38, 10, 40, 11, 43, 35, 0, 0]}, {"name": "Evelyn Ruiz", "total": 34, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 8, 0, 12, 14, 0, 0]}, {"name": "Julia Ye", "total": 29, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 3, 2, 0, 24, 0, 0]}, {"name": "JaNai Djerbi", "total": 26, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 4, 4, 7, 0, 4, 7, 0, 0]}, {"name": "Branden Wegner", "total": 2, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0]}];
+const evBreakdown = [{"action": "SBI", "count": 379}, {"action": "Linked for evasion", "count": 160}, {"action": "Did not action - Primary actively processing", "count": 106}, {"action": "Did not action - other", "count": 91}, {"action": "Did not action - Cap suspended or BK, Lien, Levy", "count": 66}, {"action": "Did not action - NON - FLEX", "count": 53}, {"action": "Did not action - \"DO NOT LINK\" comments", "count": 50}, {"action": "Did not action - BA invalid", "count": 36}, {"action": "Did not action - already linked", "count": 33}, {"action": "Did not action - No matching business or processing info", "count": 28}, {"action": "Did not action - previous SBI sent", "count": 14}, {"action": "Did not action - Both accounts have loans", "count": 13}, {"action": "Did not action - PA is active on PP", "count": 13}, {"action": "Did not action - Primary or Secondary Frozen", "count": 8}, {"action": "Did not action - TOA comments", "count": 3}];
 
 // Shared visibility state for evasion charts
 const evVis = { 'total': true, 'actioned': true };
@@ -2373,7 +2439,10 @@ function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(val, pad.left - 8, y + 4);
     }
 
-    const xStep = n > 1 ? cw / (n - 1) : cw;
+    const _vp = chartViewport[canvasId] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
     function drawLine(counts, color, w, dashed) {
       ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dashed || []);
@@ -2401,6 +2470,10 @@ function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillStyle = grad; ctx.fill();
     }
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
     evPeople.forEach((p, idx) => {
       if (!evVis['p'+idx]) return;
       const c = PERSON_COLORS[idx % PERSON_COLORS.length];
@@ -2427,10 +2500,11 @@ function evChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
       ctx.fillText(label, 0, 0);
       ctx.restore();
     }
+    ctx.restore(); // end zoom clip
 
     canvas.onmousemove = function(e) {
       const r2 = canvas.getBoundingClientRect();
-      const ci = Math.round(((e.clientX - r2.left) - pad.left) / xStep);
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
       if (ci < 0 || ci >= n) { canvas.title = ''; return; }
       const d = dataArr[ci];
       let tip = getLabelFn(d, ci) + '\n';
@@ -2493,15 +2567,11 @@ rebuildEvLegends();
 
 window.addEventListener('resize', () => {
   if (document.getElementById('tab-evasion').classList.contains('active')) {
-    if (typeof drawMlDailyChart === 'function') drawMlDailyChart();
-    if (typeof drawMlWeeklyChart === 'function') drawMlWeeklyChart();
-    if (typeof drawMlQueueChart === 'function') drawMlQueueChart();
-    window.drawEvDailyChart(); window.drawEvWeeklyChart();
-    if (typeof drawEvBreakdown === 'function') drawEvBreakdown();
+    redrawActiveEvSubTab();
   }
 });
 
-// === Evasion Action Breakdown Chart (horizontal bar) ===
+// === Evasion Action Breakdown Chart (donut) ===
 (function() {
   const canvas = document.getElementById('evBreakdownChart');
   const legendEl = document.getElementById('evBreakdownLegend');
@@ -2513,34 +2583,64 @@ window.addEventListener('resize', () => {
 
   window.drawEvBreakdown = function() {
     const rect = canvas.parentElement.getBoundingClientRect();
-    const W = Math.min(rect.width - 220, 500); const H = 220;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const S = 220;
+    canvas.width = S * dpr; canvas.height = S * dpr;
+    canvas.style.width = S + 'px'; canvas.style.height = S + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, 0, S, S);
 
-    const maxVal = Math.max(1, ...evBreakdown.map(d => d.count));
-    const barH = Math.min(22, (H - 10) / evBreakdown.length - 4);
-    const labelW = 10;
-    const barAreaW = W - labelW - 50;
+    const cx = S / 2, cy = S / 2;
+    const outerR = S / 2 - 10;
+    const innerR = outerR * 0.55;
+    const total = evBreakdown.reduce((s, d) => s + d.count, 0);
+    if (total === 0) return;
 
-    let legendHtml = '';
+    let startAngle = -Math.PI / 2;
     evBreakdown.forEach((d, i) => {
-      const y = 5 + i * (barH + 4);
-      const bw = (d.count / maxVal) * barAreaW;
+      const sliceAngle = (d.count / total) * Math.PI * 2;
       const color = BAR_COLORS[i % BAR_COLORS.length];
 
-      ctx.fillStyle = color + '33';
-      ctx.fillRect(labelW, y, barAreaW, barH);
+      // Draw arc slice
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, startAngle, startAngle + sliceAngle);
+      ctx.arc(cx, cy, innerR, startAngle + sliceAngle, startAngle, true);
+      ctx.closePath();
       ctx.fillStyle = color;
-      ctx.fillRect(labelW, y, bw, barH);
+      ctx.fill();
 
-      ctx.fillStyle = '#e4e4e7';
-      ctx.font = '11px -apple-system, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(d.count, labelW + bw + 6, y + barH - 5);
+      // Percentage label on slice (only if > 5%)
+      const pct = ((d.count / total) * 100);
+      if (pct > 5) {
+        const midAngle = startAngle + sliceAngle / 2;
+        const labelR = (outerR + innerR) / 2;
+        const lx = cx + Math.cos(midAngle) * labelR;
+        const ly = cy + Math.sin(midAngle) * labelR;
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.round(pct) + '%', lx, ly);
+      }
 
-      legendHtml += `<div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color}"></span>${d.action} (${d.count})</div>`;
+      startAngle += sliceAngle;
+    });
+
+    // Center total
+    ctx.fillStyle = '#e4e4e7';
+    ctx.font = 'bold 20px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(total, cx, cy - 6);
+    ctx.fillStyle = '#71717a';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.fillText('total', cx, cy + 12);
+
+    // Build legend
+    let legendHtml = '';
+    evBreakdown.forEach((d, i) => {
+      const color = BAR_COLORS[i % BAR_COLORS.length];
+      const pct = ((d.count / total) * 100).toFixed(1);
+      legendHtml += '<div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + color + '"></span>' + d.action + ' (' + d.count + ', ' + pct + '%)</div>';
     });
     legendEl.innerHTML = legendHtml;
   };
@@ -2770,6 +2870,34 @@ window.addEventListener('resize', () => {
   });
   tbody.innerHTML = html;
 })();
+
+function doRefresh(btn) {
+  btn.classList.add('loading');
+  window.location.replace(window.location.origin + '/?force');
+}
+
+// Apply timeline zoom & pan to all chart canvases
+const _zoomTargets = [
+  ['monthlyChart', () => window.drawChart && window.drawChart()],
+  ['driDailyChart', () => window.drawDriDailyChart && window.drawDriDailyChart()],
+  ['driWeeklyChart', () => window.drawDriWeeklyChart && window.drawDriWeeklyChart()],
+  ['bkDailyChart', () => window.drawBkDailyChart && window.drawBkDailyChart()],
+  ['bkWeeklyChart', () => window.drawBkWeeklyChart && window.drawBkWeeklyChart()],
+  ['mlDailyChart', () => window.drawMlDailyChart && window.drawMlDailyChart()],
+  ['mlWeeklyChart', () => window.drawMlWeeklyChart && window.drawMlWeeklyChart()],
+  ['evDailyChart', () => window.drawEvDailyChart && window.drawEvDailyChart()],
+  ['evWeeklyChart', () => window.drawEvWeeklyChart && window.drawEvWeeklyChart()],
+  ['evBreakdownChart', () => window.drawEvBreakdown && window.drawEvBreakdown()]
+];
+_zoomTargets.forEach(function(pair) {
+  const c = document.getElementById(pair[0]);
+  if (c) makeTimeZoomable(c, pair[1]);
+});
+
+// Auto-refresh every 30 minutes
+setInterval(function() {
+  window.location.replace(window.location.origin + '/?force');
+}, 30 * 60 * 1000);
 
 </script>
 </body>
