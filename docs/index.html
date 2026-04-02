@@ -282,7 +282,19 @@
     padding: 20px 20px 12px 20px;
     position: relative;
   }
-  canvas#monthlyChart, canvas#driDailyChart, canvas#driWeeklyChart, canvas#bkDailyChart, canvas#bkWeeklyChart, canvas#meDailyChart, canvas#meWeeklyChart {
+  .range-btn {
+    background: var(--card);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .range-btn:hover { color: var(--text); border-color: var(--accent); }
+  .range-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(59,130,246,0.1); }
+  canvas#monthlyChart, canvas#driDailyChart, canvas#driWeeklyChart, canvas#bkDailyChart, canvas#bkWeeklyChart, canvas#meDailyChart, canvas#meWeeklyChart, canvas#oeDailyChart, canvas#oeWeeklyChart, canvas#rpDailyChart, canvas#rpWeeklyChart, canvas#ppDailyChart, canvas#ppWeeklyChart, canvas#ppFinancialChart, canvas#mlDailyChart, canvas#mlWeeklyChart, canvas#evDailyChart, canvas#evWeeklyChart {
     width: 100% !important;
     height: 340px !important;
   }
@@ -517,13 +529,29 @@
 <div class="header">
   <div>
     <h1>Team Productivity Dashboard</h1>
-    <div class="subtitle">Wednesday, April 01, 2026 &mdash; Capital / SFS</div>
+    <div class="subtitle">Thursday, April 02, 2026 &mdash; Capital / SFS</div>
   </div>
   <div class="meta">
     <div style="color:var(--accent);font-weight:500">SNAPSHOT</div>
-    <div style="margin-top:4px">Generated April 01, 2026 at 03:30 PM</div>
-    <div>Auto-refreshes every 30 min</div>
+    <div style="margin-top:4px">Generated April 02, 2026 at 12:00 PM</div>
+    <div>Auto-refreshes every 4 hours</div>
   </div>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;padding:8px 24px;background:var(--card);border-bottom:1px solid var(--border);flex-wrap:wrap">
+  <span style="font-size:12px;color:var(--muted);font-weight:500">Date Range:</span>
+  <button class="range-btn active" onclick="setDateRange('all')">All 2026</button>
+  <button class="range-btn" onclick="setDateRange('cur')">This Month</button>
+  <button class="range-btn" onclick="setDateRange('prev')">Last Month</button>
+  <span style="color:var(--border)">|</span>
+  <select id="monthPicker" onchange="setDateRange('month', this.value)" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px">
+    <option value="">Pick month...</option>
+  </select>
+  <span style="color:var(--border)">|</span>
+  <input type="date" id="rangeStart" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px" min="2026-01-01" />
+  <span style="font-size:12px;color:var(--muted)">to</span>
+  <input type="date" id="rangeEnd" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px" min="2026-01-01" />
+  <button class="range-btn" onclick="applyCustomRange()">Apply</button>
 </div>
 
 <!-- Tabs -->
@@ -531,6 +559,7 @@
   <div class="tab active" onclick="switchTab('cases')">Case Completion</div>
   <div class="tab" onclick="switchTab('dri')">DRI Work</div>
   <div class="tab" onclick="switchTab('evasion')">Evasion Cases</div>
+  <div class="tab" onclick="switchTab('meetings')">Meeting Time</div>
 </div>
 
 <!-- ==================== TAB 1: Case Completion ==================== -->
@@ -539,15 +568,15 @@
 <div class="kpi-row">
   <div class="kpi">
     <div class="label">Total Resolved Today</div>
-    <div class="value blue">132</div>
+    <div class="value blue">63</div>
   </div>
   <div class="kpi">
     <div class="label">Active Closers</div>
-    <div class="value purple">10</div>
+    <div class="value purple">9</div>
   </div>
   <div class="kpi">
     <div class="label">Team Avg</div>
-    <div class="value green">12.0</div>
+    <div class="value green">5.7</div>
   </div>
 </div>
 
@@ -1122,24 +1151,113 @@
 
 <div class="kpi-row">
   <div class="kpi">
-    <div class="label">Total Escalations (2026)</div>
-    <div class="value blue">&mdash;</div>
+    <div class="label">Escalations Handled (2026)</div>
+    <div class="value blue">0</div>
   </div>
   <div class="kpi">
-    <div class="label">This Month</div>
-    <div class="value purple">&mdash;</div>
+    <div class="label">Active Handlers</div>
+    <div class="value green">0</div>
   </div>
   <div class="kpi">
-    <div class="label">Resolved</div>
-    <div class="value green">&mdash;</div>
+    <div class="label">Escalation Types</div>
+    <div class="value purple">0</div>
   </div>
 </div>
 
-<div class="section-card">
-  <div class="board-header">
-    <h2>SFS-Ops-Extension Escalations</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Handler Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">All-Time</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="oeDailyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Handled</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
-  <p style="color:var(--muted);padding:24px;text-align:center">Data source not yet configured. Awaiting sheet/report details.</p>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Top Submitters</h2>
+      <span style="font-size:12px;color:var(--muted)">Who sent escalations</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="oeSubmittersTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Submitter</th>
+            <th style="text-align:right">Count</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Escalation Types</h2>
+      <span style="font-size:12px;color:var(--muted)">Breakdown</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="oeTypesTable">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th style="text-align:right">Count</th>
+            <th style="width:130px"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>SFS-Ops-Extension Escalations &mdash; Daily &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="oeDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
+  </div>
+  <div class="legend" id="oeDailyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>SFS-Ops-Extension Escalations &mdash; Weekly &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="oeWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
+  </div>
+  <div class="legend" id="oeWeeklyLegend"></div>
+</div>
+
+<div class="time-table">
+  <div class="board-header">
+    <h2>Estimated Time Spent</h2>
+    <span class="rate-note">8 cases/hr &mdash; April 2026</span>
+  </div>
+  <div class="time-table-wrap">
+    <table>
+      <thead id="oeTimeHead"></thead>
+      <tbody id="oeTimeBody"></tbody>
+      <tfoot id="oeTimeFoot"></tfoot>
+    </table>
+  </div>
 </div>
 
 </div><!-- /subtab-dri-sfs-ops -->
@@ -1150,23 +1268,95 @@
 <div class="kpi-row">
   <div class="kpi">
     <div class="label">Total Recorded (2026)</div>
-    <div class="value blue">&mdash;</div>
+    <div class="value blue">1294</div>
   </div>
   <div class="kpi">
     <div class="label">This Month</div>
-    <div class="value purple">&mdash;</div>
+    <div class="value purple">26</div>
   </div>
   <div class="kpi">
     <div class="label">Active Processors</div>
-    <div class="value green">&mdash;</div>
+    <div class="value green">8</div>
   </div>
 </div>
 
-<div class="section-card">
-  <div class="board-header">
-    <h2>Recorded Payments/Invoices</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Daily Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">Today</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="rpDailyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Recorded</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
-  <p style="color:var(--muted);padding:24px;text-align:center">Data source not yet configured. Awaiting sheet/report details.</p>
+  <div class="section-card" style="margin-bottom:0">
+    <div class="board-header">
+      <h2>Monthly Leaderboard</h2>
+      <span style="font-size:12px;color:var(--muted)">April 2026</span>
+    </div>
+    <div style="overflow-y:auto;max-height:360px">
+      <table class="tracker-table" id="rpMonthlyLB">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th style="text-align:right">Recorded</th>
+            <th style="text-align:right">Est. Hours</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Recorded Payments &mdash; Daily &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="rpDailyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
+  </div>
+  <div class="legend" id="rpDailyLegend"></div>
+</div>
+
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Recorded Payments &mdash; Weekly &mdash; 2026</h2>
+    <span style="font-size:12px;color:var(--muted)">Click legend to toggle</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="rpWeeklyChart"></canvas>
+    <span class="zoom-hint">Scroll to zoom timeline, drag to pan</span>
+  </div>
+  <div class="legend" id="rpWeeklyLegend"></div>
+</div>
+
+<div class="time-table">
+  <div class="board-header">
+    <h2>Estimated Time Spent</h2>
+    <span class="rate-note">8 cases/hr &mdash; April 2026</span>
+  </div>
+  <div class="time-table-wrap">
+    <table>
+      <thead id="rpTimeHead"></thead>
+      <tbody id="rpTimeBody"></tbody>
+      <tfoot id="rpTimeFoot"></tfoot>
+    </table>
+  </div>
 </div>
 
 </div><!-- /subtab-dri-recorded -->
@@ -1180,11 +1370,11 @@
 <div class="kpi-row">
   <div class="kpi">
     <div class="label">ML Cases Closed (2026)</div>
-    <div class="value blue">4732</div>
+    <div class="value blue">4840</div>
   </div>
   <div class="kpi">
     <div class="label">ML Cases This Month</div>
-    <div class="value green">7</div>
+    <div class="value green">115</div>
   </div>
   <div class="kpi">
     <div class="label">Manual Reviews (2026)</div>
@@ -1347,7 +1537,193 @@
 
 </div><!-- /tab-evasion -->
 
+<!-- ==================== TAB 4: Meeting Time ==================== -->
+<div class="tab-content" id="tab-meetings">
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="label">Total Meeting Hours</div>
+    <div class="value blue">0.0</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Total Meetings</div>
+    <div class="value purple">0</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Team Members</div>
+    <div class="value green">1</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Avg hrs/person/day</div>
+    <div class="value blue">0.0</div>
+  </div>
+</div>
+
+<!-- Weekly chart with per-person bars -->
+<div class="chart-card">
+  <div class="board-header">
+    <h2>Team Meeting Hours &mdash; Weekly</h2>
+    <span style="font-size:12px;color:var(--muted)">Per person</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="mtWeeklyChart"></canvas>
+  </div>
+</div>
+
+</div><!-- /tab-meetings -->
+
 <script>
+// === Global Date Range System ===
+let dateRangeStart = null;
+let dateRangeEnd = null;
+
+(function() {
+  const sel = document.getElementById('monthPicker');
+  const now = new Date();
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  for (let m = 0; m <= now.getMonth() && m < 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = '2026-' + String(m+1).padStart(2,'0');
+    opt.textContent = months[m] + ' 2026';
+    sel.appendChild(opt);
+  }
+})();
+
+function setDateRange(mode, val) {
+  const now = new Date();
+  if (mode === 'all') {
+    dateRangeStart = null;
+    dateRangeEnd = null;
+  } else if (mode === 'cur') {
+    dateRangeStart = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-01';
+    const last = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    dateRangeEnd = last.getFullYear() + '-' + String(last.getMonth()+1).padStart(2,'0') + '-' + String(last.getDate()).padStart(2,'0');
+  } else if (mode === 'prev') {
+    const pm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    dateRangeStart = pm.getFullYear() + '-' + String(pm.getMonth()+1).padStart(2,'0') + '-01';
+    const last = new Date(pm.getFullYear(), pm.getMonth()+1, 0);
+    dateRangeEnd = last.getFullYear() + '-' + String(last.getMonth()+1).padStart(2,'0') + '-' + String(last.getDate()).padStart(2,'0');
+  } else if (mode === 'month' && val) {
+    const [y, m] = val.split('-').map(Number);
+    dateRangeStart = val + '-01';
+    const last = new Date(y, m, 0);
+    dateRangeEnd = y + '-' + String(m).padStart(2,'0') + '-' + String(last.getDate()).padStart(2,'0');
+  }
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+  if (mode === 'all' || mode === 'cur' || mode === 'prev') {
+    if (event && event.target) event.target.classList.add('active');
+  }
+  document.getElementById('rangeStart').value = dateRangeStart || '';
+  document.getElementById('rangeEnd').value = dateRangeEnd || '';
+  document.getElementById('monthPicker').value = (mode === 'month') ? val : '';
+  redrawAllCharts();
+  rebuildAllLeaderboards();
+  rebuildAllTimeTables();
+}
+
+function applyCustomRange() {
+  const s = document.getElementById('rangeStart').value;
+  const e = document.getElementById('rangeEnd').value;
+  if (s && e) {
+    dateRangeStart = s;
+    dateRangeEnd = e;
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('monthPicker').value = '';
+    redrawAllCharts();
+    rebuildAllLeaderboards();
+    rebuildAllTimeTables();
+  }
+}
+
+function filterDaily(arr) {
+  if (!dateRangeStart) return arr;
+  return arr.filter(d => d.key >= dateRangeStart && d.key <= dateRangeEnd);
+}
+
+function getDailyIndicesInRange(dailyArr) {
+  if (!dateRangeStart) {
+    return dailyArr.map((_, i) => i);
+  }
+  const indices = [];
+  dailyArr.forEach((d, i) => {
+    if (d.key >= dateRangeStart && d.key <= dateRangeEnd) indices.push(i);
+  });
+  return indices;
+}
+
+const _allChartRedraws = [];
+const _allLeaderboardRebuilds = [];
+const _allTimeTableRebuilds = [];
+
+function applyDateRangeToViewport(canvasId, dailyArr) {
+  if (!dateRangeStart) {
+    chartViewport[canvasId] = { start: 0, end: 1 };
+    return;
+  }
+  const n = dailyArr.length;
+  if (n <= 1) return;
+  let firstIdx = -1, lastIdx = -1;
+  for (let i = 0; i < n; i++) {
+    if (dailyArr[i].key >= dateRangeStart && dailyArr[i].key <= dateRangeEnd) {
+      if (firstIdx === -1) firstIdx = i;
+      lastIdx = i;
+    }
+  }
+  if (firstIdx === -1) return;
+  chartViewport[canvasId] = {
+    start: Math.max(0, (firstIdx - 1) / (n - 1)),
+    end: Math.min(1, (lastIdx + 1) / (n - 1))
+  };
+}
+
+function redrawAllCharts() {
+  if (typeof driDaily !== 'undefined') {
+    applyDateRangeToViewport('driDailyChart', driDaily);
+    applyDateRangeToViewport('driWeeklyChart', driWeekly);
+  }
+  if (typeof bkDaily !== 'undefined') {
+    applyDateRangeToViewport('bkDailyChart', bkDaily);
+    applyDateRangeToViewport('bkWeeklyChart', bkWeekly);
+  }
+  if (typeof meDaily !== 'undefined') {
+    applyDateRangeToViewport('meDailyChart', meDaily);
+    applyDateRangeToViewport('meWeeklyChart', meWeekly);
+  }
+  if (typeof oeDaily !== 'undefined') {
+    applyDateRangeToViewport('oeDailyChart', oeDaily);
+    applyDateRangeToViewport('oeWeeklyChart', oeWeekly);
+  }
+  if (typeof rpDaily !== 'undefined') {
+    applyDateRangeToViewport('rpDailyChart', rpDaily);
+    applyDateRangeToViewport('rpWeeklyChart', rpWeekly);
+  }
+  if (typeof ppDaily !== 'undefined') {
+    applyDateRangeToViewport('ppDailyChart', ppDaily);
+    applyDateRangeToViewport('ppWeeklyChart', ppWeekly);
+    applyDateRangeToViewport('ppFinancialChart', ppWeekly);
+  }
+  if (typeof mlDaily !== 'undefined') {
+    applyDateRangeToViewport('mlDailyChart', mlDaily);
+    applyDateRangeToViewport('mlWeeklyChart', mlWeekly);
+  }
+  if (typeof evDaily !== 'undefined') {
+    applyDateRangeToViewport('evDailyChart', evDaily);
+    applyDateRangeToViewport('evWeeklyChart', evWeekly);
+  }
+  if (typeof monthlyData !== 'undefined') {
+    applyDateRangeToViewport('monthlyChart', monthlyData);
+  }
+  _allChartRedraws.forEach(fn => { if (typeof fn === 'function') fn(); });
+}
+
+function rebuildAllLeaderboards() {
+  _allLeaderboardRebuilds.forEach(fn => { if (typeof fn === 'function') fn(); });
+}
+
+function rebuildAllTimeTables() {
+  _allTimeTableRebuilds.forEach(fn => { if (typeof fn === 'function') fn(); });
+}
+
 // === Timeline Zoom & Pan ===
 const chartViewport = {};
 
@@ -1409,7 +1785,7 @@ function switchTab(id) {
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   // Find the clicked tab by matching text
-  const labels = { cases: 'Case Completion', dri: 'DRI Work', evasion: 'Evasion Cases' };
+  const labels = { cases: 'Case Completion', dri: 'DRI Work', evasion: 'Evasion Cases', meetings: 'Meeting Time' };
   document.querySelectorAll('.tab').forEach(el => {
     if (el.textContent === labels[id]) el.classList.add('active');
   });
@@ -1422,6 +1798,9 @@ function switchTab(id) {
   }
   if (id === 'evasion') {
     setTimeout(redrawActiveEvSubTab, 50);
+  }
+  if (id === 'meetings') {
+    if (typeof drawMtWeeklyChart === 'function') setTimeout(drawMtWeeklyChart, 50);
   }
 }
 
@@ -1459,6 +1838,16 @@ function redrawActiveSubTab() {
     if (typeof drawMeDailyChart === 'function') setTimeout(drawMeDailyChart, 50);
     if (typeof drawMeWeeklyChart === 'function') setTimeout(drawMeWeeklyChart, 80);
   }
+  const oeActive = document.getElementById('subtab-dri-sfs-ops');
+  if (oeActive && oeActive.classList.contains('active')) {
+    if (typeof drawOeDailyChart === 'function') setTimeout(drawOeDailyChart, 50);
+    if (typeof drawOeWeeklyChart === 'function') setTimeout(drawOeWeeklyChart, 80);
+  }
+  const rpActive = document.getElementById('subtab-dri-recorded');
+  if (rpActive && rpActive.classList.contains('active')) {
+    if (typeof drawRpDailyChart === 'function') setTimeout(drawRpDailyChart, 50);
+    if (typeof drawRpWeeklyChart === 'function') setTimeout(drawRpWeeklyChart, 80);
+  }
 }
 
 // === Sub-tab Switching (within Evasion Cases) ===
@@ -1489,9 +1878,9 @@ function redrawActiveEvSubTab() {
 }
 
 // === Monthly Multi-Line Chart ===
-const monthlyData = [{"date": "Apr 01", "count": 132, "dow": "Wed"}];
-const peopleData = [{"name": "Julia Ye", "counts": [31], "total": 31}, {"name": "Angela Bautista", "counts": [26], "total": 26}, {"name": "JaNai Djerbi", "counts": [16], "total": 16}, {"name": "Evelyn Ruiz", "counts": [13], "total": 13}, {"name": "Dominic Pardilla", "counts": [10], "total": 10}, {"name": "Ajaia Gates", "counts": [8], "total": 8}, {"name": "Nicholas Padilla", "counts": [6], "total": 6}, {"name": "Ayana Fabillaran Mendoza", "counts": [3], "total": 3}, {"name": "Nikko Illastron", "counts": [1], "total": 1}];
-const peakQueueTotal = 10;
+const monthlyData = [{"date": "Apr 01", "count": 137, "dow": "Wed"}, {"date": "Apr 02", "count": 63, "dow": "Thu"}];
+const peopleData = [{"name": "Julia Ye", "counts": [39, 2], "total": 41}, {"name": "Angela Bautista", "counts": [21, 9], "total": 30}, {"name": "Evelyn Ruiz", "counts": [14, 10], "total": 24}, {"name": "JaNai Djerbi", "counts": [15, 8], "total": 23}, {"name": "Nikko Illastron", "counts": [5, 8], "total": 13}, {"name": "Ajaia Gates", "counts": [8, 2], "total": 10}, {"name": "Dominic Pardilla", "counts": [9, 0], "total": 9}, {"name": "Ayana Fabillaran Mendoza", "counts": [2, 6], "total": 8}, {"name": "Nicholas Padilla", "counts": [4, 4], "total": 8}];
+const peakQueueTotal = 15;
 
 const PERSON_COLORS = [
   '#f59e0b','#ef4444','#22c55e','#a855f7','#ec4899',
@@ -1736,9 +2125,10 @@ function buildLegend() {
   buildLegend();
   window.addEventListener('resize', drawChart);
 })();
+_allChartRedraws.push(() => window.drawChart && window.drawChart());
 
 // === Time Spent Table ===
-(function() {
+function buildCasesTimeTable() {
   const CASES_PER_HOUR = 8;
   const n = monthlyData.length;
 
@@ -1756,51 +2146,44 @@ function buildLegend() {
     return { text: text.trim(), cls };
   }
 
-  // Header: Name | date columns | Month Total | Daily Avg
+  const indices = getDailyIndicesInRange(monthlyData);
   const thead = document.getElementById('timeHead');
   let hrow = '<tr><th>Name</th>';
-  // Only show working days (skip weekends with 0 team total)
   const dayIndices = [];
-  for (let i = 0; i < n; i++) {
+  indices.forEach(i => {
     const dow = monthlyData[i].dow;
-    if (dow === 'Sat' || dow === 'Sun') continue;
+    if (dow === 'Sat' || dow === 'Sun') return;
     dayIndices.push(i);
     hrow += '<th>' + monthlyData[i].date.split(' ')[1] + '<br>' + dow + '</th>';
-  }
-  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  });
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
   thead.innerHTML = hrow;
 
-  // Body rows per person (sorted by total desc, same as peopleData)
   const tbody = document.getElementById('timeBody');
   let bodyHtml = '';
-
-  // Also track column totals for footer
   const colTotals = new Array(dayIndices.length).fill(0);
-  let grandTotal = 0;
 
   peopleData.forEach(p => {
-    const firstName = p.name.split(' ')[0];
     let row = '<tr><td>' + p.name + '</td>';
     let personWorkDays = 0;
+    let personTotal = 0;
     dayIndices.forEach((di, ci) => {
       const c = p.counts[di];
       const t = fmtTime(c);
       row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
       colTotals[ci] += c;
+      personTotal += c;
       if (c > 0) personWorkDays++;
     });
-    // Month total
-    const totalTime = fmtTime(p.total);
+    const totalTime = fmtTime(personTotal);
     row += '<td class="time-total">' + totalTime.text + '</td>';
-    // Daily avg (over working days they were active)
-    const avgCases = personWorkDays > 0 ? Math.round(p.total / personWorkDays) : 0;
+    const avgCases = personWorkDays > 0 ? Math.round(personTotal / personWorkDays) : 0;
     const avgTime = fmtTime(avgCases);
     row += '<td class="time-avg">' + avgTime.text + '</td>';
     row += '</tr>';
     bodyHtml += row;
   });
 
-  // Add rows for team members with 0 cases
   const activePeople = new Set(peopleData.map(p => p.name));
   const allMembers = ["Angela Bautista", "Nikko Illastron", "Dominic Pardilla", "Branden Wegner", "Ayana Fabillaran Mendoza", "Nicholas Padilla", "JaNai Djerbi", "Evelyn Ruiz", "Julia Ye", "Ajaia Gates", "Marivelle Solanzo"];
   allMembers.forEach(name => {
@@ -1815,7 +2198,6 @@ function buildLegend() {
 
   tbody.innerHTML = bodyHtml;
 
-  // Footer: team totals per day
   const tfoot = document.getElementById('timeFoot');
   let frow = '<tr><td>Team Total</td>';
   dayIndices.forEach((di, ci) => {
@@ -1830,10 +2212,12 @@ function buildLegend() {
   frow += '<td class="time-avg">' + teamAvg.text + '</td>';
   frow += '</tr>';
   tfoot.innerHTML = frow;
-})();
+}
+buildCasesTimeTable();
+_allTimeTableRebuilds.push(buildCasesTimeTable);
 
-const teamData = [{"name": "Julia Ye", "count": 31, "cases": [{"account": "Mary Larson Hair Design", "caseNumber": "116709549", "closedDate": "4/1/2026 8:17 AM", "subject": "Message from Square"}, {"account": "Beyond Beauty Of Mississippi", "caseNumber": "116723498", "closedDate": "4/1/2026 8:31 AM", "subject": "Message from Square"}, {"account": "van goghs wine bar", "caseNumber": "116753299", "closedDate": "4/1/2026 8:36 AM", "subject": "Message from Square"}, {"account": "UNKNOWN", "caseNumber": "116515355", "closedDate": "4/1/2026 9:25 AM", "subject": "Message from Square"}, {"account": "Uncle Jerry's BBQ", "caseNumber": "116751864", "closedDate": "4/1/2026 9:32 AM", "subject": "Message from Square"}, {"account": "Monterey Healing Loft", "caseNumber": "116752519", "closedDate": "4/1/2026 9:36 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116754419", "closedDate": "4/1/2026 9:42 AM", "subject": "Message from Square"}, {"account": "Nesnick Family & Sports Chiropractic", "caseNumber": "116754571", "closedDate": "4/1/2026 9:43 AM", "subject": "Message from Square"}, {"account": "Alternative Life Solutions Counseling PLLC", "caseNumber": "116760837", "closedDate": "4/1/2026 9:51 AM", "subject": "Message from Square"}, {"account": "Maxx comfort Heating And Air LLC.", "caseNumber": "116761063", "closedDate": "4/1/2026 9:54 AM", "subject": "Message from Square"}, {"account": "Pretty in Pink Bling Boutique LLC", "caseNumber": "116761260", "closedDate": "4/1/2026 9:54 AM", "subject": "Message from Square"}, {"account": "Embellishway", "caseNumber": "116745450", "closedDate": "4/1/2026 10:20 AM", "subject": "Message from Square"}, {"account": "LeThu Nguyen", "caseNumber": "116816240", "closedDate": "4/1/2026 10:58 AM", "subject": "Message from Square"}, {"account": "Creative Cakes &Cookies", "caseNumber": "116816572", "closedDate": "4/1/2026 11:09 AM", "subject": "Message from Square"}, {"account": "Delicate Cleaning Services", "caseNumber": "116816908", "closedDate": "4/1/2026 11:19 AM", "subject": "Message from Square"}, {"account": "Patrick", "caseNumber": "116769994", "closedDate": "4/1/2026 1:35 PM", "subject": "Message from Square"}, {"account": "Paccs Trap LLC.", "caseNumber": "116515409", "closedDate": "4/1/2026 1:39 PM", "subject": "Message from Square"}, {"account": "Grace Pest Management LLC", "caseNumber": "116515467", "closedDate": "4/1/2026 1:43 PM", "subject": "Message from Square"}, {"account": "Happy Homes Cleaning Service", "caseNumber": "116071049", "closedDate": "4/1/2026 2:05 PM", "subject": "Manual Payment Plan Upcoming Payment Reminder"}, {"account": "The Turquoise Top Hat, LLC", "caseNumber": "116721299", "closedDate": "4/1/2026 2:23 PM", "subject": "Message from Square"}, {"account": "Marley Z Distribution LLC", "caseNumber": "116751226", "closedDate": "4/1/2026 2:24 PM", "subject": "Message from Square"}, {"account": "JustFurPets Grooming Taxi LLC", "caseNumber": "116752090", "closedDate": "4/1/2026 2:27 PM", "subject": "Message from Square"}, {"account": "Geno's", "caseNumber": "116751619", "closedDate": "4/1/2026 2:31 PM", "subject": "Message from Square"}, {"account": "DFF Bootcamp", "caseNumber": "116760578", "closedDate": "4/1/2026 2:33 PM", "subject": "Message from Square"}, {"account": "Purpose Innovators", "caseNumber": "116767314", "closedDate": "4/1/2026 2:51 PM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116769317", "closedDate": "4/1/2026 3:04 PM", "subject": "Message from Square"}, {"account": "Love Me Lashes", "caseNumber": "116218114", "closedDate": "4/1/2026 3:06 PM", "subject": "Message from Square"}, {"account": "Celso Giles", "caseNumber": "116712495", "closedDate": "4/1/2026 3:07 PM", "subject": "Message from Square"}, {"account": "Nola Dah\u2019lins Cleaning", "caseNumber": "116769810", "closedDate": "4/1/2026 3:11 PM", "subject": "Message from Square"}, {"account": "Healthcare-Edu", "caseNumber": "116769991", "closedDate": "4/1/2026 3:12 PM", "subject": "Message from Square"}, {"account": "Awesome Coffee", "caseNumber": "116817187", "closedDate": "4/1/2026 3:26 PM", "subject": "Message from Square"}]}, {"name": "Angela Bautista", "count": 26, "cases": [{"account": "Pat corona", "caseNumber": "116691610", "closedDate": "4/1/2026 9:31 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116803697", "closedDate": "4/1/2026 9:58 AM", "subject": "Re: Please read: Your loan payments are past due"}, {"account": "Aurora Medical Tampa", "caseNumber": "116721267", "closedDate": "4/1/2026 10:05 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116760903", "closedDate": "4/1/2026 10:12 AM", "subject": "Message from Square"}, {"account": "Aura Blends and Crafts", "caseNumber": "116694910", "closedDate": "4/1/2026 10:26 AM", "subject": "Message from Square"}, {"account": "jamie christian photography", "caseNumber": "116746475", "closedDate": "4/1/2026 10:46 AM", "subject": "Message from Square"}, {"account": "Manriquez Auto Ltd", "caseNumber": "116749365", "closedDate": "4/1/2026 10:49 AM", "subject": "Alert from Square, Inc. Please Read"}, {"account": "Ultra Vision Media", "caseNumber": "116779053", "closedDate": "4/1/2026 10:51 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116790086", "closedDate": "4/1/2026 10:51 AM", "subject": "KF - BTQ - 389 BID PROPOSAL"}, {"account": "Stacy hall", "caseNumber": "116790529", "closedDate": "4/1/2026 10:57 AM", "subject": "Message from Square"}, {"account": "TorTrex Media", "caseNumber": "116801787", "closedDate": "4/1/2026 11:23 AM", "subject": "Automatic Payment Plan Failure"}, {"account": "TorTrex Media", "caseNumber": "116802403", "closedDate": "4/1/2026 11:25 AM", "subject": "Default Accelerated Payment"}, {"account": "Malai", "caseNumber": "116812411", "closedDate": "4/1/2026 11:37 AM", "subject": "Message from Square"}, {"account": "Luxe Hair Lounge", "caseNumber": "116691098", "closedDate": "4/1/2026 1:52 PM", "subject": "Message from Square"}, {"account": "onelocoMultimedia inc.", "caseNumber": "116758546", "closedDate": "4/1/2026 1:57 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Marissa at MH.Bliss", "caseNumber": "116813258", "closedDate": "4/1/2026 1:58 PM", "subject": "Automatic Payment Plan Debit Initiated"}, {"account": "Buenos Diaz Chiropractic", "caseNumber": "116661730", "closedDate": "4/1/2026 2:08 PM", "subject": "Message from Square"}, {"account": "Royal Spices LLC", "caseNumber": "116813277", "closedDate": "4/1/2026 2:15 PM", "subject": "Message from Square"}, {"account": "Stacy hall", "caseNumber": "116818108", "closedDate": "4/1/2026 2:16 PM", "subject": "Manual Payment Plan Upcoming Payment Reminder"}, {"account": "Roaring Rage Room", "caseNumber": "116765734", "closedDate": "4/1/2026 2:32 PM", "subject": "Message from Square"}, {"account": "The Daily Bread", "caseNumber": "116737794", "closedDate": "4/1/2026 2:47 PM", "subject": "Past Due Collections Prior 5 Days"}, {"account": "Down to earth Landscaping", "caseNumber": "116747720", "closedDate": "4/1/2026 2:48 PM", "subject": "Message from Square"}, {"account": "Lux Salon Llc", "caseNumber": "116813447", "closedDate": "4/1/2026 2:53 PM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116676081", "closedDate": "4/1/2026 3:08 PM", "subject": "Message from Square"}, {"account": "TnT Lawn Maintenance LLC", "caseNumber": "116714330", "closedDate": "4/1/2026 3:17 PM", "subject": "Deactivated Notification"}, {"account": "Fatima's pupusas and tacos", "caseNumber": "116816604", "closedDate": "4/1/2026 3:22 PM", "subject": "Message from Square"}]}, {"name": "Shykerria Lovelace", "count": 18, "cases": [{"account": "ARCO AC SERVICE TECH LLC", "caseNumber": "116759032", "closedDate": "4/1/2026 8:18 AM", "subject": "Maturity Debit Failed"}, {"account": "Ceramics, Arts & Crafts Studios by Mucci World", "caseNumber": "116749374", "closedDate": "4/1/2026 8:36 AM", "subject": "Message from Square"}, {"account": "Afolabi Ajani", "caseNumber": "116743199", "closedDate": "4/1/2026 8:42 AM", "subject": "Message from Square"}, {"account": "Black Diamond Limo", "caseNumber": "116690128", "closedDate": "4/1/2026 8:57 AM", "subject": "Message from Square"}, {"account": "International Medical Consulting", "caseNumber": "116666013", "closedDate": "4/1/2026 8:59 AM", "subject": "Maturity Debit Initiated"}, {"account": "Slumhaus", "caseNumber": "116785849", "closedDate": "4/1/2026 10:11 AM", "subject": "Message from Square"}, {"account": "Flat Rate Towing", "caseNumber": "116793123", "closedDate": "4/1/2026 10:30 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Insure Texas Now", "caseNumber": "116768367", "closedDate": "4/1/2026 11:09 AM", "subject": "Default Accelerated Payment"}, {"account": "Gabriel Michael Photography", "caseNumber": "116792941", "closedDate": "4/1/2026 11:30 AM", "subject": "Maturity Debit Reminder 30 Day Partial Unlinked"}, {"account": "Peoples Choice Pest Control LLC", "caseNumber": "116789651", "closedDate": "4/1/2026 12:43 PM", "subject": "Message from Square"}, {"account": "Lucci\u2019s House Of Looks", "caseNumber": "116776766", "closedDate": "4/1/2026 12:51 PM", "subject": "Message from Square"}, {"account": "That Colour Nails", "caseNumber": "116574858", "closedDate": "4/1/2026 1:00 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "Angels Catering LLC", "caseNumber": "116628813", "closedDate": "4/1/2026 1:17 PM", "subject": "Message from Square"}, {"account": "Opals Jewels", "caseNumber": "116710071", "closedDate": "4/1/2026 1:20 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "The Elekt LLC", "caseNumber": "116758704", "closedDate": "4/1/2026 3:09 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "ProMaster Cleaning Solutions, LLC", "caseNumber": "116814729", "closedDate": "4/1/2026 3:21 PM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116794166", "closedDate": "4/1/2026 3:24 PM", "subject": "Message from Square"}, {"account": "stone-good jewelry", "caseNumber": "116790531", "closedDate": "4/1/2026 3:28 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}]}, {"name": "JaNai Djerbi", "count": 16, "cases": [{"account": "Marie's Dulceria and Sweets LLC", "caseNumber": "116404366", "closedDate": "4/1/2026 7:48 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "The Sobo", "caseNumber": "116489549", "closedDate": "4/1/2026 7:55 AM", "subject": "Message from Square"}, {"account": "James Williams", "caseNumber": "116688573", "closedDate": "4/1/2026 8:43 AM", "subject": "Automatic Payment Plan Debit Initiated"}, {"account": "Black Sheep Salads", "caseNumber": "116693585", "closedDate": "4/1/2026 9:00 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Sherry Ross", "caseNumber": "116745313", "closedDate": "4/1/2026 9:27 AM", "subject": "Message from Square"}, {"account": "Wax Suite On Meadow", "caseNumber": "116748864", "closedDate": "4/1/2026 9:51 AM", "subject": "Message from Square"}, {"account": "IndoDaddy LLC", "caseNumber": "116755413", "closedDate": "4/1/2026 10:19 AM", "subject": "Message from Square"}, {"account": "J.McKinley", "caseNumber": "116791783", "closedDate": "4/1/2026 10:31 AM", "subject": "confirmation"}, {"account": "Sherry Ross", "caseNumber": "116744789", "closedDate": "4/1/2026 10:32 AM", "subject": "Message from Square"}, {"account": "Always believe in children llc", "caseNumber": "116582058", "closedDate": "4/1/2026 10:41 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Mountain man salon", "caseNumber": "116817703", "closedDate": "4/1/2026 11:42 AM", "subject": "Message from Square"}, {"account": "Skytrading, LLC", "caseNumber": "116818533", "closedDate": "4/1/2026 12:08 PM", "subject": "Message from Square"}, {"account": "Pineapple Sol", "caseNumber": "116516012", "closedDate": "4/1/2026 2:24 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Luna's Kitchen Park City", "caseNumber": "116564867", "closedDate": "4/1/2026 2:47 PM", "subject": "Message from Square"}, {"account": "Gold Coast Auto Care", "caseNumber": "116607353", "closedDate": "4/1/2026 2:57 PM", "subject": "Loan payment"}, {"account": "Make A Way Auto Sales LLC", "caseNumber": "116835140", "closedDate": "4/1/2026 3:09 PM", "subject": "Message from Square"}]}, {"name": "Evelyn Ruiz", "count": 13, "cases": [{"account": "7TH AVENUE NIGHTCLUB", "caseNumber": "116140520", "closedDate": "4/1/2026 10:20 AM", "subject": "Message from Square"}, {"account": "Barber", "caseNumber": "116632080", "closedDate": "4/1/2026 10:42 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116697024", "closedDate": "4/1/2026 10:54 AM", "subject": "Message from Square"}, {"account": "Shaestheticsss", "caseNumber": "116713863", "closedDate": "4/1/2026 11:05 AM", "subject": "Message from Square"}, {"account": "All Marine Services", "caseNumber": "116742678", "closedDate": "4/1/2026 11:37 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116743856", "closedDate": "4/1/2026 11:47 AM", "subject": "Message from Square"}, {"account": "rodriguezwireless#2", "caseNumber": "116745609", "closedDate": "4/1/2026 11:55 AM", "subject": "Message from Square"}, {"account": "Cabrera ,leoncio,j", "caseNumber": "116751874", "closedDate": "4/1/2026 12:05 PM", "subject": "Message from Square"}, {"account": "SPACE", "caseNumber": "116758564", "closedDate": "4/1/2026 2:41 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "wannawish", "caseNumber": "116790988", "closedDate": "4/1/2026 2:47 PM", "subject": "Message from Square"}, {"account": "Al Balde", "caseNumber": "116814627", "closedDate": "4/1/2026 3:10 PM", "subject": "Message from Square"}, {"account": "Autumn Edwards", "caseNumber": "116811609", "closedDate": "4/1/2026 3:21 PM", "subject": "Message from Square"}, {"account": "Bishos", "caseNumber": "116813983", "closedDate": "4/1/2026 3:26 PM", "subject": "Message from Square"}]}, {"name": "Dominic Pardilla", "count": 10, "cases": [{"account": "No Cap\u2026It\u2019s Hookah!!!", "caseNumber": "116812999", "closedDate": "4/1/2026 9:14 AM", "subject": "Message from Square"}, {"account": "Outpost trading & grill", "caseNumber": "116813125", "closedDate": "4/1/2026 9:17 AM", "subject": "Message from Square"}, {"account": "Inspired Soulful Innovations Llc", "caseNumber": "116813213", "closedDate": "4/1/2026 9:19 AM", "subject": "Message from Square"}, {"account": "Eager Hands Design", "caseNumber": "116813298", "closedDate": "4/1/2026 9:22 AM", "subject": "Message from Square"}, {"account": "Emma's Baby Boutique", "caseNumber": "116813421", "closedDate": "4/1/2026 9:53 AM", "subject": "Message from Square"}, {"account": "Fox VALLEY TATTOO", "caseNumber": "116815331", "closedDate": "4/1/2026 10:26 AM", "subject": "Message from Square"}, {"account": "The Forum Theatre Company Wichita", "caseNumber": "116685984", "closedDate": "4/1/2026 11:25 AM", "subject": "Manual Payment Plan Upcoming Payment Reminder"}, {"account": "UNKNOWN", "caseNumber": "116690017", "closedDate": "4/1/2026 11:35 AM", "subject": "Message from Square"}, {"account": "AquaVac Carpet Cleaning", "caseNumber": "116760434", "closedDate": "4/1/2026 12:00 PM", "subject": "Message from Square"}, {"account": "Emma's Baby Boutique", "caseNumber": "116814561", "closedDate": "4/1/2026 1:08 PM", "subject": "Maturity Debit Reminder 30 Day Partial Unlinked"}]}, {"name": "Ajaia Gates", "count": 8, "cases": [{"account": "-", "caseNumber": "116717650", "closedDate": "4/1/2026 9:47 AM", "subject": "Re: Urgent reminder: You have a past due balance. Let us help."}, {"account": "Jksbenincasa@gmail.com", "caseNumber": "116728905", "closedDate": "4/1/2026 9:53 AM", "subject": "Message from Square"}, {"account": "The Health Spot Chiropractic and Wellness Center", "caseNumber": "116745272", "closedDate": "4/1/2026 10:11 AM", "subject": "Message from Square"}, {"account": "Ortiz services LLC", "caseNumber": "116786711", "closedDate": "4/1/2026 10:43 AM", "subject": "Automatic Payment Plan Upcoming Payment Reminder"}, {"account": "Oasis Essential LLC", "caseNumber": "116800917", "closedDate": "4/1/2026 12:08 PM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Ceesay African Inport", "caseNumber": "116744430", "closedDate": "4/1/2026 2:10 PM", "subject": "Message from Square"}, {"account": "Eriden Images", "caseNumber": "116801859", "closedDate": "4/1/2026 3:02 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Premier Massage Studio", "caseNumber": "116801849", "closedDate": "4/1/2026 3:12 PM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}]}, {"name": "Nicholas Padilla", "count": 6, "cases": [{"account": "Massage 22", "caseNumber": "116781236", "closedDate": "4/1/2026 1:44 PM", "subject": "Message from Square"}, {"account": "Kathryn\u2019s Soul", "caseNumber": "116701818", "closedDate": "4/1/2026 2:00 PM", "subject": "Message from Square"}, {"account": "Mad Chicken", "caseNumber": "116790568", "closedDate": "4/1/2026 2:05 PM", "subject": "Message from Square"}, {"account": "430 international llc 01", "caseNumber": "116722779", "closedDate": "4/1/2026 2:23 PM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "Tulum Taco Shop", "caseNumber": "116754204", "closedDate": "4/1/2026 2:37 PM", "subject": "Add Payer"}, {"account": "Kocoa Chocolate Bar", "caseNumber": "116754201", "closedDate": "4/1/2026 2:38 PM", "subject": "Add Payer"}]}, {"name": "Ayana Fabillaran Mendoza", "count": 3, "cases": [{"account": "HHS Design\u2019s LLC", "caseNumber": "116817469", "closedDate": "4/1/2026 11:34 AM", "subject": "Message from Square"}, {"account": "Blush Nail", "caseNumber": "116752571", "closedDate": "4/1/2026 2:08 PM", "subject": "Alert from Square, Inc. Please Read"}, {"account": "-", "caseNumber": "116818690", "closedDate": "4/1/2026 2:11 PM", "subject": "INVITATION"}]}, {"name": "Nikko Illastron", "count": 1, "cases": [{"account": "Dolce Vita Beauty LLC", "caseNumber": "116814602", "closedDate": "4/1/2026 10:04 AM", "subject": "Message from Square"}]}, {"name": "Branden Wegner", "count": 0, "cases": []}, {"name": "Marivelle Solanzo", "count": 0, "cases": []}];
-const queueData = {"Evelyn Ruiz": 17, "Ajaia Gates": 16, "Shykerria Lovelace": 9, "Nikko Illastron": 9, "Janai Djerbi": 8, "Nicholas Padilla": 7, "Julia Ye": 6, "Dominic Pardilla": 4, "Angela Bautista": 4, "Branden Wegner": 3};
+const teamData = [{"name": "Shykerria Lovelace", "count": 14, "cases": [{"account": "ProMaster Cleaning Solutions, LLC", "caseNumber": "116814729", "closedDate": "4/2/2026 8:08 AM", "subject": "Message from Square"}, {"account": "The Sift Bakery", "caseNumber": "116789960", "closedDate": "4/2/2026 8:21 AM", "subject": "Maturity Debit Reminder 30 Day Partial Unlinked"}, {"account": "ARCO AC SERVICE TECH LLC", "caseNumber": "116759032", "closedDate": "4/2/2026 8:52 AM", "subject": "Maturity Debit Failed"}, {"account": "Matthew Chavis", "caseNumber": "116324338", "closedDate": "4/2/2026 9:21 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Angels Catering LLC", "caseNumber": "116628813", "closedDate": "4/2/2026 9:35 AM", "subject": "Message from Square"}, {"account": "Vila Massage", "caseNumber": "116793036", "closedDate": "4/2/2026 10:18 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Jazzs Luxe Designs", "caseNumber": "116838819", "closedDate": "4/2/2026 10:26 AM", "subject": "Maturity Upcoming Debit Reminder Linked"}, {"account": "The Vice Versa Construction Company", "caseNumber": "116838038", "closedDate": "4/2/2026 10:42 AM", "subject": "Maturity Debit Reminder 30 Day Partial Unlinked"}, {"account": "Mel sao", "caseNumber": "116838358", "closedDate": "4/2/2026 10:52 AM", "subject": "Maturity Debit Reminder 10 Day Partial Linked"}, {"account": "Crenshaw's Chicken And Waffles", "caseNumber": "116776321", "closedDate": "4/2/2026 11:01 AM", "subject": "Message from Square"}, {"account": "Jay_TheHealer", "caseNumber": "116837992", "closedDate": "4/2/2026 11:07 AM", "subject": "Message from Square"}, {"account": "Matthew Chavis", "caseNumber": "116324285", "closedDate": "4/2/2026 11:11 AM", "subject": "Payment Plan Completed"}, {"account": "HH Graphix", "caseNumber": "116516557", "closedDate": "4/2/2026 11:23 AM", "subject": "Maturity Debit Failed"}, {"account": "-", "caseNumber": "116839174", "closedDate": "4/2/2026 11:38 AM", "subject": "Message from Square"}]}, {"name": "Evelyn Ruiz", "count": 10, "cases": [{"account": "-", "caseNumber": "116601018", "closedDate": "4/2/2026 9:43 AM", "subject": "Message from Square"}, {"account": "Barber", "caseNumber": "116632080", "closedDate": "4/2/2026 9:46 AM", "subject": "Message from Square"}, {"account": "Yineska Barrera", "caseNumber": "116677413", "closedDate": "4/2/2026 9:49 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116697024", "closedDate": "4/2/2026 9:55 AM", "subject": "Message from Square"}, {"account": "Shannon Wages", "caseNumber": "116858549", "closedDate": "4/2/2026 10:06 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116726784", "closedDate": "4/2/2026 10:43 AM", "subject": "Message from Square"}, {"account": "Cerulean", "caseNumber": "116734875", "closedDate": "4/2/2026 10:57 AM", "subject": "Message from Square"}, {"account": "Autumn Edwards", "caseNumber": "116811609", "closedDate": "4/2/2026 11:19 AM", "subject": "Message from Square"}, {"account": "Al Balde", "caseNumber": "116835312", "closedDate": "4/2/2026 11:49 AM", "subject": "Message from Square"}, {"account": "H3irloom Food Group", "caseNumber": "116814976", "closedDate": "4/2/2026 11:50 AM", "subject": "Message from Square"}]}, {"name": "Angela Bautista", "count": 9, "cases": [{"account": "Relaxing Effects", "caseNumber": "116858503", "closedDate": "4/2/2026 10:08 AM", "subject": "Message from Square"}, {"account": "Buenos Diaz Chiropractic", "caseNumber": "116661730", "closedDate": "4/2/2026 10:16 AM", "subject": "Message from Square"}, {"account": "MI Salon and Spa", "caseNumber": "116690602", "closedDate": "4/2/2026 10:29 AM", "subject": "Message from Square"}, {"account": "Just Botanicals", "caseNumber": "116722249", "closedDate": "4/2/2026 10:56 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Ultra Vision Media", "caseNumber": "116779053", "closedDate": "4/2/2026 11:04 AM", "subject": "Message from Square"}, {"account": "Royal Spices LLC", "caseNumber": "116813277", "closedDate": "4/2/2026 11:23 AM", "subject": "Message from Square"}, {"account": "Lux Salon Llc", "caseNumber": "116813447", "closedDate": "4/2/2026 11:25 AM", "subject": "Message from Square"}, {"account": "The Stone Soup Kitchen - Home of Nils\u2019 Magic Kimchi", "caseNumber": "116815642", "closedDate": "4/2/2026 11:28 AM", "subject": "Message from Square"}, {"account": "The Skin Cottage", "caseNumber": "116816979", "closedDate": "4/2/2026 11:30 AM", "subject": "Message from Square"}]}, {"name": "JaNai Djerbi", "count": 8, "cases": [{"account": "Always believe in children llc", "caseNumber": "116582058", "closedDate": "4/2/2026 8:20 AM", "subject": "Maturity Debit Reminder 30 Day Partial Linked"}, {"account": "Gold Coast Auto Care", "caseNumber": "116607353", "closedDate": "4/2/2026 8:29 AM", "subject": "Loan payment"}, {"account": "JDG Ventures, LLC", "caseNumber": "116774022", "closedDate": "4/2/2026 8:46 AM", "subject": "Message from Square"}, {"account": "Sundberg Chiropractic", "caseNumber": "116736370", "closedDate": "4/2/2026 9:00 AM", "subject": "Past Due Collections Prior 5 Days"}, {"account": "J.McKinley", "caseNumber": "116781784", "closedDate": "4/2/2026 9:09 AM", "subject": "Message from Square"}, {"account": "AG Institute LLC", "caseNumber": "116791805", "closedDate": "4/2/2026 9:15 AM", "subject": "Message from Square"}, {"account": "Michele Lawson", "caseNumber": "116804343", "closedDate": "4/2/2026 9:41 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116337496", "closedDate": "4/2/2026 9:53 AM", "subject": "Message from Square"}]}, {"name": "Nikko Illastron", "count": 8, "cases": [{"account": "Beans and Leaf's coffee cafe", "caseNumber": "116855943", "closedDate": "4/2/2026 8:45 AM", "subject": "Message from Square"}, {"account": "Anu Littles", "caseNumber": "116856163", "closedDate": "4/2/2026 8:52 AM", "subject": "Message from Square"}, {"account": "Energy Zone", "caseNumber": "116787635", "closedDate": "4/2/2026 9:37 AM", "subject": "Message from Square"}, {"account": "Spoongroup LLC", "caseNumber": "116846913", "closedDate": "4/2/2026 9:51 AM", "subject": "Re: [Final Notice] Your remaining loan balance is due. Let us help."}, {"account": "Michael Potts", "caseNumber": "116774612", "closedDate": "4/2/2026 9:55 AM", "subject": "Message from Square"}, {"account": "Not Specified", "caseNumber": "116788662", "closedDate": "4/2/2026 10:24 AM", "subject": "Message from Square"}, {"account": "Hair By Brenda", "caseNumber": "116788485", "closedDate": "4/2/2026 10:29 AM", "subject": "Message from Square"}, {"account": "Spoongroup LLC", "caseNumber": "116800878", "closedDate": "4/2/2026 9:51 AM", "subject": "Re: [Final Notice] Your remaining loan balance is due. Let us help."}]}, {"name": "Ayana Fabillaran Mendoza", "count": 6, "cases": [{"account": "HHS Design\u2019s LLC", "caseNumber": "116817469", "closedDate": "4/2/2026 8:59 AM", "subject": "Message from Square"}, {"account": "-", "caseNumber": "116819830", "closedDate": "4/2/2026 9:00 AM", "subject": "April 2026-Moore Capital with Square"}, {"account": "Heart Academy llc", "caseNumber": "116833237", "closedDate": "4/2/2026 9:01 AM", "subject": "Message from Square"}, {"account": "The Purple Tang", "caseNumber": "116834025", "closedDate": "4/2/2026 9:17 AM", "subject": "Message from Square"}, {"account": "Whats Bugging You Integrated Pest Management Inc", "caseNumber": "116838533", "closedDate": "4/2/2026 11:19 AM", "subject": "Maturity Debit Failed"}, {"account": "Leucadia Transportation", "caseNumber": "116811209", "closedDate": "4/2/2026 11:32 AM", "subject": "Message from Square"}]}, {"name": "Nicholas Padilla", "count": 4, "cases": [{"account": "H & A BLESSING", "caseNumber": "116855200", "closedDate": "4/2/2026 8:21 AM", "subject": "Message from Square"}, {"account": "The Conscious Mercantile", "caseNumber": "116855754", "closedDate": "4/2/2026 8:39 AM", "subject": "Message from Square"}, {"account": "The Blue Melody LLC", "caseNumber": "116837315", "closedDate": "4/2/2026 9:59 AM", "subject": "This Is No April Fool\u2019s\u2026 A Scandal Awaits"}, {"account": "-", "caseNumber": "116852527", "closedDate": "4/2/2026 10:53 AM", "subject": "It\u2019s a new era at Treats! Join us for what\u2019s to come\u2026\u00a0"}]}, {"name": "Ajaia Gates", "count": 2, "cases": [{"account": "UNKNOWN", "caseNumber": "116419772", "closedDate": "4/2/2026 10:15 AM", "subject": "Message from Square"}, {"account": "Serenity Now Massage Therapy", "caseNumber": "116251290", "closedDate": "4/2/2026 10:45 AM", "subject": "Automatic Payment Plan Upcoming Payment Reminder"}]}, {"name": "Julia Ye", "count": 2, "cases": [{"account": "RAGS 2 RICHES UNEEK THRIFTERS LLC", "caseNumber": "116707190", "closedDate": "4/2/2026 9:47 AM", "subject": "Message from Square"}, {"account": "Hair By Josie", "caseNumber": "116707802", "closedDate": "4/2/2026 9:51 AM", "subject": "Message from Square"}]}, {"name": "Branden Wegner", "count": 0, "cases": []}, {"name": "Dominic Pardilla", "count": 0, "cases": []}, {"name": "Marivelle Solanzo", "count": 0, "cases": []}];
+const queueData = {"Evelyn Ruiz": 18, "Ajaia Gates": 18, "Julia Ye": 14, "Nicholas Padilla": 11, "Janai Djerbi": 11, "Shykerria Lovelace": 9, "Angela Bautista": 8, "Dominic Pardilla": 6, "Branden Wegner": 4, "Ayana Fabillaran Mendoza": 2, "Nikko Illastron": 1};
 const SFBASE = "https://squareinc.lightning.force.com/lightning/r/Case/";
 
 // Build case-insensitive lookup for queue counts
@@ -1845,10 +2229,9 @@ function getQueue(name) {
 }
 
 // === Case Completion Daily Leaderboard ===
-(function() {
+function buildCasesDailyLB() {
   const tbody = document.querySelector('#casesDailyLB tbody');
   if (!tbody) return;
-  // teamData is already sorted by count desc
   let html = '';
   teamData.forEach((m, i) => {
     const q = getQueue(m.name);
@@ -1861,13 +2244,14 @@ function getQueue(name) {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildCasesDailyLB();
+_allLeaderboardRebuilds.push(buildCasesDailyLB);
 
 // === Case Completion Monthly Leaderboard ===
-(function() {
+function buildCasesMonthlyLB() {
   const tbody = document.querySelector('#casesMonthlyLB tbody');
   if (!tbody) return;
-  // peopleData has monthly totals; also include 0-case members
   const activePeople = new Set(peopleData.map(p => p.name));
   const allMembers = ["Angela Bautista", "Nikko Illastron", "Dominic Pardilla", "Branden Wegner", "Ayana Fabillaran Mendoza", "Nicholas Padilla", "JaNai Djerbi", "Evelyn Ruiz", "Julia Ye", "Ajaia Gates", "Marivelle Solanzo"];
   const merged = [...peopleData];
@@ -1888,7 +2272,9 @@ function getQueue(name) {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildCasesMonthlyLB();
+_allLeaderboardRebuilds.push(buildCasesMonthlyLB);
 
 // ============================================================
 // === DRI Work Tab ===
@@ -2058,6 +2444,7 @@ const _drawDriWeekly = driChartEngine('driWeeklyChart', driWeekly, 'weekly',
 
 window.drawDriDailyChart = _drawDriDaily || (() => {});
 window.drawDriWeeklyChart = _drawDriWeekly || (() => {});
+_allChartRedraws.push(window.drawDriDailyChart, window.drawDriWeeklyChart);
 
 const _allDriRedraw = [window.drawDriDailyChart, window.drawDriWeeklyChart];
 function rebuildDriLegends() {
@@ -2072,8 +2459,8 @@ window.addEventListener('resize', () => {
   }
 });
 
-// === DRI Time Spent Table (current month daily — same format as Case Completion) ===
-(function() {
+// === DRI Time Spent Table ===
+function buildDriTimeTable() {
   const CASES_PER_HOUR = 8;
   if (driDaily.length === 0) return;
 
@@ -2091,13 +2478,11 @@ window.addEventListener('resize', () => {
     return { text: text.trim(), cls };
   }
 
-  // Filter to current month working days
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const indices = getDailyIndicesInRange(driDaily);
   const dayIndices = [];
   const dayMeta = [];
-  driDaily.forEach((d, idx) => {
-    if (!d.key.startsWith(curPrefix)) return;
+  indices.forEach(idx => {
+    const d = driDaily[idx];
     if (d.dow === 'Sat' || d.dow === 'Sun') return;
     dayIndices.push(idx);
     dayMeta.push(d);
@@ -2110,7 +2495,7 @@ window.addEventListener('resize', () => {
   dayMeta.forEach(d => {
     hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
   });
-  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
   thead.innerHTML = hrow;
 
   const tbody = document.getElementById('driTimeBody');
@@ -2150,16 +2535,18 @@ window.addEventListener('resize', () => {
   frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
   frow += '</tr>';
   tfoot.innerHTML = frow;
-})();
+}
+buildDriTimeTable();
+_allTimeTableRebuilds.push(buildDriTimeTable);
 
 // === DRI Daily Leaderboard (today) ===
-(function() {
+function buildDriDailyLB() {
   const tbody = document.querySelector('#driDailyLB tbody');
   if (!tbody || driDaily.length === 0) return;
-  // Get today's index (last entry in driDaily)
-  const todayIdx = driDaily.length - 1;
-  // Build per-person today counts
-  const todayData = driPeople.map(p => ({ name: p.name, count: p.daily[todayIdx] || 0 }));
+  const indices = getDailyIndicesInRange(driDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = driPeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
   todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   function fmtHrs(c) {
@@ -2177,21 +2564,19 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildDriDailyLB();
+_allLeaderboardRebuilds.push(buildDriDailyLB);
 
 // === DRI Monthly Leaderboard (current month) ===
-(function() {
+function buildDriMonthlyLB() {
   const tbody = document.querySelector('#driMonthlyLB tbody');
   if (!tbody || driDaily.length === 0) return;
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  // Sum current month per person
-  const monthIndices = [];
-  driDaily.forEach((d, idx) => { if (d.key.startsWith(curPrefix)) monthIndices.push(idx); });
+  const indices = getDailyIndicesInRange(driDaily);
 
   const monthData = driPeople.map(p => {
     let sum = 0;
-    monthIndices.forEach(idx => { sum += p.daily[idx] || 0; });
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
     return { name: p.name, count: sum };
   });
   monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
@@ -2211,7 +2596,9 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildDriMonthlyLB();
+_allLeaderboardRebuilds.push(buildDriMonthlyLB);
 
 // ============================================================
 // === Bankruptcy Cases Sub-tab ===
@@ -2376,6 +2763,7 @@ const _drawBkWeekly = bkChartEngine('bkWeeklyChart', bkWeekly, 'weekly',
 
 window.drawBkDailyChart = _drawBkDaily || (() => {});
 window.drawBkWeeklyChart = _drawBkWeekly || (() => {});
+_allChartRedraws.push(window.drawBkDailyChart, window.drawBkWeeklyChart);
 
 const _allBkRedraw = [window.drawBkDailyChart, window.drawBkWeeklyChart];
 function rebuildBkLegends() {
@@ -2391,8 +2779,8 @@ window.addEventListener('resize', () => {
   }
 });
 
-// === BK Time Spent Table (current month daily) ===
-(function() {
+// === BK Time Spent Table ===
+function buildBkTimeTable() {
   const CASES_PER_HOUR = 8;
   if (bkDaily.length === 0) return;
 
@@ -2410,12 +2798,11 @@ window.addEventListener('resize', () => {
     return { text: text.trim(), cls };
   }
 
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const indices = getDailyIndicesInRange(bkDaily);
   const dayIndices = [];
   const dayMeta = [];
-  bkDaily.forEach((d, idx) => {
-    if (!d.key.startsWith(curPrefix)) return;
+  indices.forEach(idx => {
+    const d = bkDaily[idx];
     if (d.dow === 'Sat' || d.dow === 'Sun') return;
     dayIndices.push(idx);
     dayMeta.push(d);
@@ -2427,7 +2814,7 @@ window.addEventListener('resize', () => {
   dayMeta.forEach(d => {
     hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
   });
-  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
   thead.innerHTML = hrow;
 
   const tbody = document.getElementById('bkTimeBody');
@@ -2464,14 +2851,18 @@ window.addEventListener('resize', () => {
   frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
   frow += '</tr>';
   tfoot.innerHTML = frow;
-})();
+}
+buildBkTimeTable();
+_allTimeTableRebuilds.push(buildBkTimeTable);
 
 // === BK Daily Leaderboard (today) ===
-(function() {
+function buildBkDailyLB() {
   const tbody = document.querySelector('#bkDailyLB tbody');
   if (!tbody || bkDaily.length === 0) return;
-  const todayIdx = bkDaily.length - 1;
-  const todayData = bkPeople.map(p => ({ name: p.name, count: p.daily[todayIdx] || 0 }));
+  const indices = getDailyIndicesInRange(bkDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = bkPeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
   todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   function fmtHrs(c) {
@@ -2489,20 +2880,19 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildBkDailyLB();
+_allLeaderboardRebuilds.push(buildBkDailyLB);
 
 // === BK Monthly Leaderboard (current month) ===
-(function() {
+function buildBkMonthlyLB() {
   const tbody = document.querySelector('#bkMonthlyLB tbody');
   if (!tbody || bkDaily.length === 0) return;
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const monthIndices = [];
-  bkDaily.forEach((d, idx) => { if (d.key.startsWith(curPrefix)) monthIndices.push(idx); });
+  const indices = getDailyIndicesInRange(bkDaily);
 
   const monthData = bkPeople.map(p => {
     let sum = 0;
-    monthIndices.forEach(idx => { sum += p.daily[idx] || 0; });
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
     return { name: p.name, count: sum };
   });
   monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
@@ -2522,7 +2912,9 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildBkMonthlyLB();
+_allLeaderboardRebuilds.push(buildBkMonthlyLB);
 
 // ============================================================
 // === Physical Payments Sub-tab ===
@@ -2530,6 +2922,7 @@ window.addEventListener('resize', () => {
 const ppDaily = [];
 const ppWeekly = [];
 const ppPeople = [];
+const ppReceivers = [];
 
 const ppVis = { 'total': true };
 ppPeople.forEach((_, i) => { ppVis['p' + i] = false; });
@@ -2678,6 +3071,7 @@ const _drawPpWeekly = ppChartEngine('ppWeeklyChart', ppWeekly, 'weekly',
 
 window.drawPpDailyChart = _drawPpDaily || (() => {});
 window.drawPpWeeklyChart = _drawPpWeekly || (() => {});
+_allChartRedraws.push(window.drawPpDailyChart, window.drawPpWeeklyChart);
 
 const _allPpRedraw = [window.drawPpDailyChart, window.drawPpWeeklyChart];
 function rebuildPpLegends() {
@@ -2690,11 +3084,99 @@ window.addEventListener('resize', () => {
   const ppTab = document.getElementById('subtab-dri-physical');
   if (ppTab && ppTab.classList.contains('active') && document.getElementById('tab-dri').classList.contains('active')) {
     window.drawPpDailyChart(); window.drawPpWeeklyChart();
+    if (window.drawPpFinancialChart) window.drawPpFinancialChart();
   }
 });
 
-// === PP Time Spent Table (current month daily) ===
+// === PP Financial Chart (Recorded Amount vs Refund Credit by week) ===
 (function() {
+  const canvas = document.getElementById('ppFinancialChart');
+  if (!canvas || ppWeekly.length === 0) return;
+  const ctx = canvas.getContext('2d');
+  if (!chartViewport['ppFinancialChart']) chartViewport['ppFinancialChart'] = { start: 0, end: 1 };
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = rect.height || 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = { top: 30, right: 20, bottom: 50, left: 70 };
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = ppWeekly.length;
+    if (n < 1) return;
+
+    const vp = chartViewport['ppFinancialChart'] || {start:0,end:1};
+    const visStart = Math.floor(vp.start * n);
+    const visEnd = Math.ceil(vp.end * n);
+    const visN = visEnd - visStart;
+    if (visN <= 0) return;
+    const visData = ppWeekly.slice(visStart, visEnd);
+
+    let maxVal = 1;
+    visData.forEach(d => {
+      maxVal = Math.max(maxVal, d.recordedAmt || 0, d.refundAmt || 0);
+    });
+    maxVal = Math.ceil(maxVal * 1.15);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let g = 0; g <= 4; g++) {
+      const val = maxVal * g / 4;
+      const y = pad.top + ch - (ch * g / 4);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText('$' + Math.round(val).toLocaleString(), pad.left - 8, y + 4);
+    }
+
+    const barW = Math.max(4, Math.floor(cw / visN * 0.35));
+    const gap = 2;
+
+    visData.forEach((d, i) => {
+      const x = pad.left + (i + 0.5) * (cw / visN);
+
+      // Recorded amount bar (blue)
+      const recH = (d.recordedAmt || 0) / maxVal * ch;
+      ctx.fillStyle = 'rgba(59,130,246,0.8)';
+      ctx.fillRect(x - barW - gap/2, pad.top + ch - recH, barW, recH);
+
+      // Refund amount bar (red)
+      const refH = (d.refundAmt || 0) / maxVal * ch;
+      ctx.fillStyle = 'rgba(239,68,68,0.8)';
+      ctx.fillRect(x + gap/2, pad.top + ch - refH, barW, refH);
+
+      // X-axis label
+      ctx.fillStyle = '#71717a';
+      ctx.font = '10px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      if (visN <= 20 || i % Math.ceil(visN / 15) === 0) {
+        ctx.save();
+        ctx.translate(x, H - pad.bottom + 14);
+        ctx.rotate(-0.5);
+        ctx.fillText(d.week || d.date || '', 0, 0);
+        ctx.restore();
+      }
+    });
+  }
+
+  window.drawPpFinancialChart = draw;
+  _allChartRedraws.push(draw);
+  draw();
+
+  // Legend
+  const legendEl = document.getElementById('ppFinancialLegend');
+  if (legendEl) {
+    legendEl.innerHTML = '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:16px;font-size:12px;color:var(--text)"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgba(59,130,246,0.8)"></span> Recorded Amount</span>' +
+      '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text)"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.8)"></span> Refund Credit</span>';
+  }
+})();
+
+// === PP Time Spent Table ===
+function buildPpTimeTable() {
   const CASES_PER_HOUR = 8;
   if (ppDaily.length === 0) return;
 
@@ -2712,12 +3194,11 @@ window.addEventListener('resize', () => {
     return { text: text.trim(), cls };
   }
 
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const indices = getDailyIndicesInRange(ppDaily);
   const dayIndices = [];
   const dayMeta = [];
-  ppDaily.forEach((d, idx) => {
-    if (!d.key.startsWith(curPrefix)) return;
+  indices.forEach(idx => {
+    const d = ppDaily[idx];
     if (d.dow === 'Sat' || d.dow === 'Sun') return;
     dayIndices.push(idx);
     dayMeta.push(d);
@@ -2729,7 +3210,7 @@ window.addEventListener('resize', () => {
   dayMeta.forEach(d => {
     hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
   });
-  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
   thead.innerHTML = hrow;
 
   const tbody = document.getElementById('ppTimeBody');
@@ -2766,14 +3247,18 @@ window.addEventListener('resize', () => {
   frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
   frow += '</tr>';
   tfoot.innerHTML = frow;
-})();
+}
+buildPpTimeTable();
+_allTimeTableRebuilds.push(buildPpTimeTable);
 
 // === PP Daily Leaderboard (today) ===
-(function() {
+function buildPpDailyLB() {
   const tbody = document.querySelector('#ppDailyLB tbody');
   if (!tbody || ppDaily.length === 0) return;
-  const todayIdx = ppDaily.length - 1;
-  const todayData = ppPeople.map(p => ({ name: p.name, count: p.daily[todayIdx] || 0 }));
+  const indices = getDailyIndicesInRange(ppDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = ppPeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
   todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   function fmtHrs(c) {
@@ -2791,20 +3276,19 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildPpDailyLB();
+_allLeaderboardRebuilds.push(buildPpDailyLB);
 
 // === PP Monthly Leaderboard (current month) ===
-(function() {
+function buildPpMonthlyLB() {
   const tbody = document.querySelector('#ppMonthlyLB tbody');
   if (!tbody || ppDaily.length === 0) return;
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const monthIndices = [];
-  ppDaily.forEach((d, idx) => { if (d.key.startsWith(curPrefix)) monthIndices.push(idx); });
+  const indices = getDailyIndicesInRange(ppDaily);
 
   const monthData = ppPeople.map(p => {
     let sum = 0;
-    monthIndices.forEach(idx => { sum += p.daily[idx] || 0; });
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
     return { name: p.name, count: sum };
   });
   monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
@@ -2824,7 +3308,58 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildPpMonthlyLB();
+_allLeaderboardRebuilds.push(buildPpMonthlyLB);
+
+// === PP Received Daily Leaderboard (today) ===
+function buildPpRecvDailyLB() {
+  const tbody = document.querySelector('#ppRecvDailyLB tbody');
+  if (!tbody || ppDaily.length === 0 || ppReceivers.length === 0) return;
+  const indices = getDailyIndicesInRange(ppDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = ppReceivers.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
+  todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  let html = '';
+  todayData.forEach((p, i) => {
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+buildPpRecvDailyLB();
+_allLeaderboardRebuilds.push(buildPpRecvDailyLB);
+
+// === PP Received Monthly Leaderboard (current month) ===
+function buildPpRecvMonthlyLB() {
+  const tbody = document.querySelector('#ppRecvMonthlyLB tbody');
+  if (!tbody || ppDaily.length === 0 || ppReceivers.length === 0) return;
+  const indices = getDailyIndicesInRange(ppDaily);
+
+  const monthData = ppReceivers.map(p => {
+    let sum = 0;
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
+    return { name: p.name, count: sum };
+  });
+  monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  let html = '';
+  monthData.forEach((p, i) => {
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+buildPpRecvMonthlyLB();
+_allLeaderboardRebuilds.push(buildPpRecvMonthlyLB);
 
 // ============================================================
 // === Manager Escalations Sub-tab ===
@@ -2989,6 +3524,7 @@ const _drawMeWeekly = meChartEngine('meWeeklyChart', meWeekly, 'weekly',
 
 window.drawMeDailyChart = _drawMeDaily || (() => {});
 window.drawMeWeeklyChart = _drawMeWeekly || (() => {});
+_allChartRedraws.push(window.drawMeDailyChart, window.drawMeWeeklyChart);
 
 const _allMeRedraw = [window.drawMeDailyChart, window.drawMeWeeklyChart];
 function rebuildMeLegends() {
@@ -3004,8 +3540,8 @@ window.addEventListener('resize', () => {
   }
 });
 
-// === ME Time Spent Table (current month daily) ===
-(function() {
+// === ME Time Spent Table ===
+function buildMeTimeTable() {
   const CASES_PER_HOUR = 8;
   if (meDaily.length === 0) return;
 
@@ -3023,12 +3559,11 @@ window.addEventListener('resize', () => {
     return { text: text.trim(), cls };
   }
 
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const indices = getDailyIndicesInRange(meDaily);
   const dayIndices = [];
   const dayMeta = [];
-  meDaily.forEach((d, idx) => {
-    if (!d.key.startsWith(curPrefix)) return;
+  indices.forEach(idx => {
+    const d = meDaily[idx];
     if (d.dow === 'Sat' || d.dow === 'Sun') return;
     dayIndices.push(idx);
     dayMeta.push(d);
@@ -3040,7 +3575,7 @@ window.addEventListener('resize', () => {
   dayMeta.forEach(d => {
     hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
   });
-  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
   thead.innerHTML = hrow;
 
   const tbody = document.getElementById('meTimeBody');
@@ -3077,14 +3612,18 @@ window.addEventListener('resize', () => {
   frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
   frow += '</tr>';
   tfoot.innerHTML = frow;
-})();
+}
+buildMeTimeTable();
+_allTimeTableRebuilds.push(buildMeTimeTable);
 
 // === ME Daily Leaderboard (today) ===
-(function() {
+function buildMeDailyLB() {
   const tbody = document.querySelector('#meDailyLB tbody');
   if (!tbody || meDaily.length === 0) return;
-  const todayIdx = meDaily.length - 1;
-  const todayData = mePeople.map(p => ({ name: p.name, count: p.daily[todayIdx] || 0 }));
+  const indices = getDailyIndicesInRange(meDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = mePeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
   todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   function fmtHrs(c) {
@@ -3102,20 +3641,19 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildMeDailyLB();
+_allLeaderboardRebuilds.push(buildMeDailyLB);
 
 // === ME Monthly Leaderboard (current month) ===
-(function() {
+function buildMeMonthlyLB() {
   const tbody = document.querySelector('#meMonthlyLB tbody');
   if (!tbody || meDaily.length === 0) return;
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const monthIndices = [];
-  meDaily.forEach((d, idx) => { if (d.key.startsWith(curPrefix)) monthIndices.push(idx); });
+  const indices = getDailyIndicesInRange(meDaily);
 
   const monthData = mePeople.map(p => {
     let sum = 0;
-    monthIndices.forEach(idx => { sum += p.daily[idx] || 0; });
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
     return { name: p.name, count: sum };
   });
   monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
@@ -3135,16 +3673,650 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
+}
+buildMeMonthlyLB();
+_allLeaderboardRebuilds.push(buildMeMonthlyLB);
+
+// ============================================================
+// === SFS-Ops-Extension Escalations Sub-tab ===
+// ============================================================
+const oeDaily = [];
+const oeWeekly = [];
+const oePeople = [];
+const oeSubmitters = [];
+const oeTypes = [];
+
+// Shared visibility state for OE charts
+const oeVis = { 'total': true };
+oePeople.forEach((_, i) => { oeVis['p' + i] = false; });
+
+// Reuse chart engine pattern for OE charts
+function oeChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  return function draw() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = { top: 24, right: 20, bottom: 48, left: 50 };
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = dataArr.length;
+    if (n < 1) return;
+
+    let maxVal = 1;
+    if (oeVis.total) maxVal = Math.max(maxVal, ...dataArr.map(d => d.count));
+    oePeople.forEach((p, i) => {
+      if (oeVis['p'+i]) maxVal = Math.max(maxVal, ...p[personKey]);
+    });
+    const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }
+
+    const _vp = chartViewport[canvasId] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
+    function drawLine(counts, color, w) {
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
+      for (let i = 0; i < n; i++) {
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    function drawDots(counts, color, r) {
+      for (let i = 0; i < n; i++) {
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }
+    }
+    function drawArea(counts, color) {
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, color + '22'); grad.addColorStop(1, color + '02');
+      ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) ctx.lineTo(pad.left + i * xStep, pad.top + ch - (ch * counts[i] / yMax));
+      ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
+    // Person lines
+    oePeople.forEach((p, idx) => {
+      if (!oeVis['p'+idx]) return;
+      const c = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p[personKey], c, 1.5); drawDots(p[personKey], c, 2);
+    });
+
+    // Total line
+    if (oeVis.total) {
+      const c = dataArr.map(d => d.count);
+      drawArea(c, '#3b82f6'); drawLine(c, '#3b82f6', 2.5); drawDots(c, '#3b82f6', 2.5);
+    }
+
+    ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    const skip = skipMod || Math.max(1, Math.ceil(n / 20));
+    for (let i = 0; i < n; i++) {
+      if (i % skip !== 0 && i !== n - 1) continue;
+      const x = pad.left + i * xStep;
+      const label = getLabelFn(dataArr[i], i);
+      ctx.save(); ctx.translate(x, H - pad.bottom + 14);
+      if (n > 20) ctx.rotate(-0.45);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
+    ctx.restore(); // end zoom clip
+
+    canvas.onmousemove = function(e) {
+      const r2 = canvas.getBoundingClientRect();
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
+      if (ci < 0 || ci >= n) { canvas.title = ''; return; }
+      const d = dataArr[ci];
+      let tip = getLabelFn(d, ci) + '\n';
+      if (oeVis.total) tip += 'Total: ' + d.count + '\n';
+      oePeople.forEach((p, pi) => {
+        if (oeVis['p'+pi] && p[personKey][ci] > 0) tip += p.name.split(' ')[0] + ': ' + p[personKey][ci] + '\n';
+      });
+      canvas.title = tip.trim();
+    };
+  };
+}
+
+function buildOeLegend(legendId, redrawFns) {
+  const el = document.getElementById(legendId);
+  if (!el) return;
+  el.innerHTML = '';
+  const mk = (lbl, col, key) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-total' + (oeVis[key] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${col}"></span>${lbl}`;
+    item.onclick = () => { oeVis[key] = !oeVis[key]; rebuildOeLegends(); redrawFns.forEach(f => f()); };
+    el.appendChild(item);
+  };
+  mk('Total', '#3b82f6', 'total');
+  oePeople.forEach((p, i) => {
+    if (p.total === 0) return;
+    const item = document.createElement('span');
+    const c = PERSON_COLORS[i % PERSON_COLORS.length];
+    item.className = 'legend-item legend-person' + (oeVis['p'+i] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${c}"></span>${p.name.split(' ')[0]} (${p.total})`;
+    item.onclick = () => { oeVis['p'+i] = !oeVis['p'+i]; rebuildOeLegends(); redrawFns.forEach(f => f()); };
+    el.appendChild(item);
+  });
+  const anyOn = oePeople.some((_, i) => oeVis['p'+i]);
+  const tog = document.createElement('span');
+  tog.className = 'legend-item'; tog.style.cssText = 'color:var(--accent);font-weight:500';
+  tog.textContent = anyOn ? 'Hide All' : 'Show All';
+  tog.onclick = () => {
+    const v = !anyOn; oePeople.forEach((_, i) => { oeVis['p'+i] = v; });
+    rebuildOeLegends(); redrawFns.forEach(f => f());
+  };
+  el.appendChild(tog);
+}
+
+const _drawOeDaily = oeChartEngine('oeDailyChart', oeDaily, 'daily',
+  (d) => d.date + ' ' + d.dow, 0);
+const _drawOeWeekly = oeChartEngine('oeWeeklyChart', oeWeekly, 'weekly',
+  (d) => 'Wk ' + d.week, 1);
+
+window.drawOeDailyChart = _drawOeDaily || (() => {});
+window.drawOeWeeklyChart = _drawOeWeekly || (() => {});
+_allChartRedraws.push(window.drawOeDailyChart, window.drawOeWeeklyChart);
+
+const _allOeRedraw = [window.drawOeDailyChart, window.drawOeWeeklyChart];
+function rebuildOeLegends() {
+  buildOeLegend('oeDailyLegend', _allOeRedraw);
+  buildOeLegend('oeWeeklyLegend', _allOeRedraw);
+}
+rebuildOeLegends();
+
+window.addEventListener('resize', () => {
+  const oeTab = document.getElementById('subtab-dri-sfs-ops');
+  if (oeTab && oeTab.classList.contains('active') && document.getElementById('tab-dri').classList.contains('active')) {
+    window.drawOeDailyChart(); window.drawOeWeeklyChart();
+  }
+});
+
+// === OE Time Spent Table ===
+function buildOeTimeTable() {
+  const CASES_PER_HOUR = 8;
+  if (oeDaily.length === 0) return;
+
+  function fmtTime(cases) {
+    if (cases === 0) return { text: '--', cls: 'zero' };
+    const hrs = cases / CASES_PER_HOUR;
+    const h = Math.floor(hrs);
+    const m = Math.round((hrs - h) * 60);
+    const text = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
+    let cls = 'light';
+    if (hrs >= 8) cls = 'over';
+    else if (hrs >= 6) cls = 'heavy';
+    else if (hrs >= 3) cls = 'medium';
+    else if (hrs >= 1) cls = 'light';
+    return { text: text.trim(), cls };
+  }
+
+  const indices = getDailyIndicesInRange(oeDaily);
+  const dayIndices = [];
+  const dayMeta = [];
+  indices.forEach(idx => {
+    const d = oeDaily[idx];
+    if (d.dow === 'Sat' || d.dow === 'Sun') return;
+    dayIndices.push(idx);
+    dayMeta.push(d);
+  });
+  if (dayIndices.length === 0) return;
+
+  const thead = document.getElementById('oeTimeHead');
+  let hrow = '<tr><th>Name</th>';
+  dayMeta.forEach(d => {
+    hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
+  });
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
+  thead.innerHTML = hrow;
+
+  const tbody = document.getElementById('oeTimeBody');
+  let bodyHtml = '';
+  const colTotals = new Array(dayIndices.length).fill(0);
+
+  oePeople.forEach(p => {
+    let monthTotal = 0; let workDays = 0;
+    let row = '<tr><td>' + p.name + '</td>';
+    dayIndices.forEach((di, ci) => {
+      const c = p.daily[di];
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      monthTotal += c; if (c > 0) workDays++;
+    });
+    const totalT = fmtTime(monthTotal);
+    row += '<td class="time-total">' + totalT.text + '</td>';
+    const avgC = workDays > 0 ? Math.round(monthTotal / workDays) : 0;
+    row += '<td class="time-avg">' + fmtTime(avgC).text + '</td></tr>';
+    bodyHtml += row;
+  });
+  tbody.innerHTML = bodyHtml;
+
+  const tfoot = document.getElementById('oeTimeFoot');
+  let frow = '<tr><td>Team Total</td>';
+  dayIndices.forEach((_, ci) => {
+    const t = fmtTime(colTotals[ci]);
+    frow += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+  });
+  const gt = colTotals.reduce((a, b) => a + b, 0);
+  const wd = colTotals.filter(c => c > 0).length || 1;
+  frow += '<td class="time-total">' + fmtTime(gt).text + '</td>';
+  frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
+  frow += '</tr>';
+  tfoot.innerHTML = frow;
+}
+buildOeTimeTable();
+_allTimeTableRebuilds.push(buildOeTimeTable);
+
+// === OE Handler Leaderboard (range totals) ===
+function buildOeDailyLB() {
+  const tbody = document.querySelector('#oeDailyLB tbody');
+  if (!tbody || oePeople.length === 0) return;
+  const indices = getDailyIndicesInRange(oeDaily);
+  const sorted = oePeople.map(p => {
+    let sum = 0;
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
+    return { name: p.name, total: sum };
+  });
+  sorted.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }
+
+  let html = '';
+  sorted.forEach((p, i) => {
+    const cls = p.total === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.total + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.total) + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+buildOeDailyLB();
+_allLeaderboardRebuilds.push(buildOeDailyLB);
+
+// === OE Submitters Table ===
+(function() {
+  const tbody = document.querySelector('#oeSubmittersTable tbody');
+  if (!tbody || oeSubmitters.length === 0) return;
+  let html = '';
+  oeSubmitters.forEach((s, i) => {
+    html += '<tr><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + s.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + s.count + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
 })();
+
+// === OE Escalation Types Table ===
+(function() {
+  const tbody = document.querySelector('#oeTypesTable tbody');
+  if (!tbody || oeTypes.length === 0) return;
+  const maxCount = oeTypes.length > 0 ? oeTypes[0].count : 1;
+  let html = '';
+  oeTypes.forEach(t => {
+    const barW = Math.max(4, Math.round((t.count / maxCount) * 120));
+    html += '<tr><td>' + t.type + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + t.count + '</td>';
+    html += '<td><div style="width:' + barW + 'px;height:6px;border-radius:3px;background:var(--accent)"></div></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+})();
+
+// ============================================================
+// === Recorded Payments Sub-tab ===
+// ============================================================
+const rpDaily = [{"date": "Jan 01", "count": 0, "dow": "Thu", "key": "2026-01-01"}, {"date": "Jan 02", "count": 11, "dow": "Fri", "key": "2026-01-02"}, {"date": "Jan 03", "count": 0, "dow": "Sat", "key": "2026-01-03"}, {"date": "Jan 04", "count": 0, "dow": "Sun", "key": "2026-01-04"}, {"date": "Jan 05", "count": 14, "dow": "Mon", "key": "2026-01-05"}, {"date": "Jan 06", "count": 6, "dow": "Tue", "key": "2026-01-06"}, {"date": "Jan 07", "count": 14, "dow": "Wed", "key": "2026-01-07"}, {"date": "Jan 08", "count": 10, "dow": "Thu", "key": "2026-01-08"}, {"date": "Jan 09", "count": 9, "dow": "Fri", "key": "2026-01-09"}, {"date": "Jan 10", "count": 0, "dow": "Sat", "key": "2026-01-10"}, {"date": "Jan 11", "count": 0, "dow": "Sun", "key": "2026-01-11"}, {"date": "Jan 12", "count": 21, "dow": "Mon", "key": "2026-01-12"}, {"date": "Jan 13", "count": 11, "dow": "Tue", "key": "2026-01-13"}, {"date": "Jan 14", "count": 68, "dow": "Wed", "key": "2026-01-14"}, {"date": "Jan 15", "count": 17, "dow": "Thu", "key": "2026-01-15"}, {"date": "Jan 16", "count": 9, "dow": "Fri", "key": "2026-01-16"}, {"date": "Jan 17", "count": 0, "dow": "Sat", "key": "2026-01-17"}, {"date": "Jan 18", "count": 0, "dow": "Sun", "key": "2026-01-18"}, {"date": "Jan 19", "count": 0, "dow": "Mon", "key": "2026-01-19"}, {"date": "Jan 20", "count": 64, "dow": "Tue", "key": "2026-01-20"}, {"date": "Jan 21", "count": 21, "dow": "Wed", "key": "2026-01-21"}, {"date": "Jan 22", "count": 16, "dow": "Thu", "key": "2026-01-22"}, {"date": "Jan 23", "count": 0, "dow": "Fri", "key": "2026-01-23"}, {"date": "Jan 24", "count": 0, "dow": "Sat", "key": "2026-01-24"}, {"date": "Jan 25", "count": 0, "dow": "Sun", "key": "2026-01-25"}, {"date": "Jan 26", "count": 18, "dow": "Mon", "key": "2026-01-26"}, {"date": "Jan 27", "count": 12, "dow": "Tue", "key": "2026-01-27"}, {"date": "Jan 28", "count": 11, "dow": "Wed", "key": "2026-01-28"}, {"date": "Jan 29", "count": 2, "dow": "Thu", "key": "2026-01-29"}, {"date": "Jan 30", "count": 17, "dow": "Fri", "key": "2026-01-30"}, {"date": "Jan 31", "count": 0, "dow": "Sat", "key": "2026-01-31"}, {"date": "Feb 01", "count": 0, "dow": "Sun", "key": "2026-02-01"}, {"date": "Feb 02", "count": 14, "dow": "Mon", "key": "2026-02-02"}, {"date": "Feb 03", "count": 19, "dow": "Tue", "key": "2026-02-03"}, {"date": "Feb 04", "count": 12, "dow": "Wed", "key": "2026-02-04"}, {"date": "Feb 05", "count": 12, "dow": "Thu", "key": "2026-02-05"}, {"date": "Feb 06", "count": 1, "dow": "Fri", "key": "2026-02-06"}, {"date": "Feb 07", "count": 0, "dow": "Sat", "key": "2026-02-07"}, {"date": "Feb 08", "count": 0, "dow": "Sun", "key": "2026-02-08"}, {"date": "Feb 09", "count": 34, "dow": "Mon", "key": "2026-02-09"}, {"date": "Feb 10", "count": 27, "dow": "Tue", "key": "2026-02-10"}, {"date": "Feb 11", "count": 0, "dow": "Wed", "key": "2026-02-11"}, {"date": "Feb 12", "count": 11, "dow": "Thu", "key": "2026-02-12"}, {"date": "Feb 13", "count": 63, "dow": "Fri", "key": "2026-02-13"}, {"date": "Feb 14", "count": 0, "dow": "Sat", "key": "2026-02-14"}, {"date": "Feb 15", "count": 0, "dow": "Sun", "key": "2026-02-15"}, {"date": "Feb 16", "count": 0, "dow": "Mon", "key": "2026-02-16"}, {"date": "Feb 17", "count": 57, "dow": "Tue", "key": "2026-02-17"}, {"date": "Feb 18", "count": 7, "dow": "Wed", "key": "2026-02-18"}, {"date": "Feb 19", "count": 7, "dow": "Thu", "key": "2026-02-19"}, {"date": "Feb 20", "count": 9, "dow": "Fri", "key": "2026-02-20"}, {"date": "Feb 21", "count": 0, "dow": "Sat", "key": "2026-02-21"}, {"date": "Feb 22", "count": 0, "dow": "Sun", "key": "2026-02-22"}, {"date": "Feb 23", "count": 26, "dow": "Mon", "key": "2026-02-23"}, {"date": "Feb 24", "count": 27, "dow": "Tue", "key": "2026-02-24"}, {"date": "Feb 25", "count": 27, "dow": "Wed", "key": "2026-02-25"}, {"date": "Feb 26", "count": 6, "dow": "Thu", "key": "2026-02-26"}, {"date": "Feb 27", "count": 22, "dow": "Fri", "key": "2026-02-27"}, {"date": "Feb 28", "count": 0, "dow": "Sat", "key": "2026-02-28"}, {"date": "Mar 01", "count": 0, "dow": "Sun", "key": "2026-03-01"}, {"date": "Mar 02", "count": 2, "dow": "Mon", "key": "2026-03-02"}, {"date": "Mar 03", "count": 48, "dow": "Tue", "key": "2026-03-03"}, {"date": "Mar 04", "count": 40, "dow": "Wed", "key": "2026-03-04"}, {"date": "Mar 05", "count": 4, "dow": "Thu", "key": "2026-03-05"}, {"date": "Mar 06", "count": 3, "dow": "Fri", "key": "2026-03-06"}, {"date": "Mar 07", "count": 0, "dow": "Sat", "key": "2026-03-07"}, {"date": "Mar 08", "count": 0, "dow": "Sun", "key": "2026-03-08"}, {"date": "Mar 09", "count": 35, "dow": "Mon", "key": "2026-03-09"}, {"date": "Mar 10", "count": 39, "dow": "Tue", "key": "2026-03-10"}, {"date": "Mar 11", "count": 19, "dow": "Wed", "key": "2026-03-11"}, {"date": "Mar 12", "count": 1, "dow": "Thu", "key": "2026-03-12"}, {"date": "Mar 13", "count": 77, "dow": "Fri", "key": "2026-03-13"}, {"date": "Mar 14", "count": 0, "dow": "Sat", "key": "2026-03-14"}, {"date": "Mar 15", "count": 0, "dow": "Sun", "key": "2026-03-15"}, {"date": "Mar 16", "count": 62, "dow": "Mon", "key": "2026-03-16"}, {"date": "Mar 17", "count": 13, "dow": "Tue", "key": "2026-03-17"}, {"date": "Mar 18", "count": 10, "dow": "Wed", "key": "2026-03-18"}, {"date": "Mar 19", "count": 11, "dow": "Thu", "key": "2026-03-19"}, {"date": "Mar 20", "count": 12, "dow": "Fri", "key": "2026-03-20"}, {"date": "Mar 21", "count": 0, "dow": "Sat", "key": "2026-03-21"}, {"date": "Mar 22", "count": 0, "dow": "Sun", "key": "2026-03-22"}, {"date": "Mar 23", "count": 53, "dow": "Mon", "key": "2026-03-23"}, {"date": "Mar 24", "count": 23, "dow": "Tue", "key": "2026-03-24"}, {"date": "Mar 25", "count": 15, "dow": "Wed", "key": "2026-03-25"}, {"date": "Mar 26", "count": 6, "dow": "Thu", "key": "2026-03-26"}, {"date": "Mar 27", "count": 11, "dow": "Fri", "key": "2026-03-27"}, {"date": "Mar 28", "count": 0, "dow": "Sat", "key": "2026-03-28"}, {"date": "Mar 29", "count": 0, "dow": "Sun", "key": "2026-03-29"}, {"date": "Mar 30", "count": 45, "dow": "Mon", "key": "2026-03-30"}, {"date": "Mar 31", "count": 7, "dow": "Tue", "key": "2026-03-31"}, {"date": "Apr 01", "count": 8, "dow": "Wed", "key": "2026-04-01"}, {"date": "Apr 02", "count": 18, "dow": "Thu", "key": "2026-04-02"}];
+const rpWeekly = [{"week": "Dec 29", "count": 11, "key": "2025-12-29"}, {"week": "Jan 05", "count": 53, "key": "2026-01-05"}, {"week": "Jan 12", "count": 126, "key": "2026-01-12"}, {"week": "Jan 19", "count": 101, "key": "2026-01-19"}, {"week": "Jan 26", "count": 60, "key": "2026-01-26"}, {"week": "Feb 02", "count": 58, "key": "2026-02-02"}, {"week": "Feb 09", "count": 135, "key": "2026-02-09"}, {"week": "Feb 16", "count": 80, "key": "2026-02-16"}, {"week": "Feb 23", "count": 108, "key": "2026-02-23"}, {"week": "Mar 02", "count": 97, "key": "2026-03-02"}, {"week": "Mar 09", "count": 171, "key": "2026-03-09"}, {"week": "Mar 16", "count": 108, "key": "2026-03-16"}, {"week": "Mar 23", "count": 108, "key": "2026-03-23"}, {"week": "Mar 30", "count": 78, "key": "2026-03-30"}];
+const rpPeople = [{"name": "Julia Ye", "total": 497, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4, 8, 0, 0, 0, 12, 8, 0, 0, 0, 0, 0, 0, 36, 5, 6, 7, 0, 0, 11, 22, 7, 5, 15, 0, 0, 0, 34, 20, 0, 0, 0, 0, 19, 37, 10, 0, 15, 0, 0, 45, 10, 9, 8, 8, 0, 0, 25, 12, 12, 5, 9, 0, 0, 42, 4, 8, 18], "weekly": [0, 0, 0, 0, 0, 13, 20, 54, 60, 54, 81, 80, 63, 72]}, {"name": "JaNai Djerbi", "total": 488, "daily": [0, 11, 0, 0, 14, 3, 12, 10, 9, 0, 0, 13, 11, 16, 15, 9, 0, 0, 0, 6, 21, 15, 0, 0, 0, 18, 12, 11, 0, 11, 0, 0, 14, 18, 8, 2, 0, 0, 0, 15, 14, 0, 10, 4, 0, 0, 0, 21, 2, 1, 1, 0, 0, 15, 4, 20, 1, 5, 0, 0, 2, 14, 19, 2, 1, 0, 0, 16, 2, 0, 0, 0, 0, 0, 17, 2, 1, 1, 3, 0, 0, 26, 2, 0, 0, 2, 0, 0, 3, 3, 0, 0], "weekly": [11, 48, 64, 42, 52, 42, 43, 25, 45, 38, 18, 24, 30, 6]}, {"name": "Nikko Illastron", "total": 274, "daily": [0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 8, 0, 51, 2, 0, 0, 0, 0, 58, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 2, 1, 0, 0, 7, 5, 0, 1, 58, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 1, 61, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 4, 61, 58, 3, 3, 71, 1, 2, 0, 70, 1, 0, 0]}, {"name": "Angela Bautista", "total": 12, "daily": [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 1, 0, 1, 5, 0, 0, 0, 0, 1, 0, 0, 4, 0]}, {"name": "Branden Wegner", "total": 11, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 7, 0]}, {"name": "Evelyn Ruiz", "total": 6, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 3, 0]}, {"name": "Nicholas Padilla", "total": 4, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]}, {"name": "Ayana Fabillaran Mendoza", "total": 2, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0]}, {"name": "Dominic Pardilla", "total": 0, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"name": "Ajaia Gates", "total": 0, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"name": "Marivelle Solanzo", "total": 0, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}];
+
+const rpVis = { 'total': true };
+rpPeople.forEach((_, i) => { rpVis['p' + i] = false; });
+
+function rpChartEngine(canvasId, dataArr, personKey, getLabelFn, skipMod) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  return function draw() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 340;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const pad = { top: 24, right: 20, bottom: 48, left: 50 };
+    const cw = W - pad.left - pad.right;
+    const ch = H - pad.top - pad.bottom;
+    const n = dataArr.length;
+    if (n < 1) return;
+
+    let maxVal = 1;
+    if (rpVis.total) maxVal = Math.max(maxVal, ...dataArr.map(d => d.count));
+    rpPeople.forEach((p, i) => {
+      if (rpVis['p'+i]) maxVal = Math.max(maxVal, ...p[personKey]);
+    });
+    const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#71717a'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {
+      const val = Math.round(yMax * i / 5);
+      const y = pad.top + ch - (ch * i / 5);
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+      ctx.fillText(val, pad.left - 8, y + 4);
+    }
+
+    const _vp = chartViewport[canvasId] || {start:0,end:1};
+    const _vr = _vp.end - _vp.start;
+    const xStep = (n > 1 ? cw / (n - 1) : cw) / (_vr || 1);
+    const _xOff = -_vp.start * Math.max(1, n - 1) * xStep;
+    function drawLine(counts, color, w) {
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
+      for (let i = 0; i < n; i++) {
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    function drawDots(counts, color, r) {
+      for (let i = 0; i < n; i++) {
+        const x = pad.left + i * xStep;
+        const y = pad.top + ch - (ch * counts[i] / yMax);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }
+    }
+    function drawArea(counts, color) {
+      const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, color + '22'); grad.addColorStop(1, color + '02');
+      ctx.beginPath(); ctx.moveTo(pad.left, pad.top + ch);
+      for (let i = 0; i < n; i++) ctx.lineTo(pad.left + i * xStep, pad.top + ch - (ch * counts[i] / yMax));
+      ctx.lineTo(pad.left + (n-1) * xStep, pad.top + ch); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.left, 0, cw, H); ctx.clip();
+    ctx.translate(_xOff, 0);
+
+    // Person lines
+    rpPeople.forEach((p, idx) => {
+      if (!rpVis['p'+idx]) return;
+      const c = PERSON_COLORS[idx % PERSON_COLORS.length];
+      drawLine(p[personKey], c, 1.5); drawDots(p[personKey], c, 2);
+    });
+
+    // Total line
+    if (rpVis.total) {
+      const c = dataArr.map(d => d.count);
+      drawArea(c, '#3b82f6'); drawLine(c, '#3b82f6', 2.5); drawDots(c, '#3b82f6', 2.5);
+    }
+
+    ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    const skip = skipMod || Math.max(1, Math.ceil(n / 20));
+    for (let i = 0; i < n; i++) {
+      if (i % skip !== 0 && i !== n - 1) continue;
+      const x = pad.left + i * xStep;
+      const label = getLabelFn(dataArr[i], i);
+      ctx.save(); ctx.translate(x, H - pad.bottom + 14);
+      if (n > 20) ctx.rotate(-0.45);
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
+    ctx.restore(); // end zoom clip
+
+    canvas.onmousemove = function(e) {
+      const r2 = canvas.getBoundingClientRect();
+      const ci = Math.round(((e.clientX - r2.left) - pad.left - _xOff) / xStep);
+      if (ci < 0 || ci >= n) { canvas.title = ''; return; }
+      const d = dataArr[ci];
+      let tip = getLabelFn(d, ci) + '\n';
+      if (rpVis.total) tip += 'Total: ' + d.count + '\n';
+      rpPeople.forEach((p, pi) => {
+        if (rpVis['p'+pi] && p[personKey][ci] > 0) tip += p.name.split(' ')[0] + ': ' + p[personKey][ci] + '\n';
+      });
+      canvas.title = tip.trim();
+    };
+  };
+}
+
+function buildRpLegend(legendId, redrawFns) {
+  const el = document.getElementById(legendId);
+  if (!el) return;
+  el.innerHTML = '';
+  const mk = (lbl, col, key) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item legend-total' + (rpVis[key] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${col}"></span>${lbl}`;
+    item.onclick = () => { rpVis[key] = !rpVis[key]; rebuildRpLegends(); redrawFns.forEach(f => f()); };
+    el.appendChild(item);
+  };
+  mk('Total', '#3b82f6', 'total');
+  rpPeople.forEach((p, i) => {
+    if (p.total === 0) return;
+    const item = document.createElement('span');
+    const c = PERSON_COLORS[i % PERSON_COLORS.length];
+    item.className = 'legend-item legend-person' + (rpVis['p'+i] ? '' : ' off');
+    item.innerHTML = `<span class="legend-swatch" style="background:${c}"></span>${p.name.split(' ')[0]} (${p.total})`;
+    item.onclick = () => { rpVis['p'+i] = !rpVis['p'+i]; rebuildRpLegends(); redrawFns.forEach(f => f()); };
+    el.appendChild(item);
+  });
+  const anyOn = rpPeople.some((_, i) => rpVis['p'+i]);
+  const tog = document.createElement('span');
+  tog.className = 'legend-item'; tog.style.cssText = 'color:var(--accent);font-weight:500';
+  tog.textContent = anyOn ? 'Hide All' : 'Show All';
+  tog.onclick = () => {
+    const v = !anyOn; rpPeople.forEach((_, i) => { rpVis['p'+i] = v; });
+    rebuildRpLegends(); redrawFns.forEach(f => f());
+  };
+  el.appendChild(tog);
+}
+
+const _drawRpDaily = rpChartEngine('rpDailyChart', rpDaily, 'daily',
+  (d) => d.date + ' ' + d.dow, 0);
+const _drawRpWeekly = rpChartEngine('rpWeeklyChart', rpWeekly, 'weekly',
+  (d) => 'Wk ' + d.week, 1);
+
+window.drawRpDailyChart = _drawRpDaily || (() => {});
+window.drawRpWeeklyChart = _drawRpWeekly || (() => {});
+_allChartRedraws.push(window.drawRpDailyChart, window.drawRpWeeklyChart);
+
+const _allRpRedraw = [window.drawRpDailyChart, window.drawRpWeeklyChart];
+function rebuildRpLegends() {
+  buildRpLegend('rpDailyLegend', _allRpRedraw);
+  buildRpLegend('rpWeeklyLegend', _allRpRedraw);
+}
+rebuildRpLegends();
+
+window.addEventListener('resize', () => {
+  const rpTab = document.getElementById('subtab-dri-recorded');
+  if (rpTab && rpTab.classList.contains('active') && document.getElementById('tab-dri').classList.contains('active')) {
+    window.drawRpDailyChart(); window.drawRpWeeklyChart();
+  }
+});
+
+// === RP Time Spent Table ===
+function buildRpTimeTable() {
+  const CASES_PER_HOUR = 8;
+  if (rpDaily.length === 0) return;
+
+  function fmtTime(cases) {
+    if (cases === 0) return { text: '--', cls: 'zero' };
+    const hrs = cases / CASES_PER_HOUR;
+    const h = Math.floor(hrs);
+    const m = Math.round((hrs - h) * 60);
+    const text = h > 0 ? h + 'h ' + (m > 0 ? m + 'm' : '') : m + 'm';
+    let cls = 'light';
+    if (hrs >= 8) cls = 'over';
+    else if (hrs >= 6) cls = 'heavy';
+    else if (hrs >= 3) cls = 'medium';
+    else if (hrs >= 1) cls = 'light';
+    return { text: text.trim(), cls };
+  }
+
+  const indices = getDailyIndicesInRange(rpDaily);
+  const dayIndices = [];
+  const dayMeta = [];
+  indices.forEach(idx => {
+    const d = rpDaily[idx];
+    if (d.dow === 'Sat' || d.dow === 'Sun') return;
+    dayIndices.push(idx);
+    dayMeta.push(d);
+  });
+  if (dayIndices.length === 0) return;
+
+  const thead = document.getElementById('rpTimeHead');
+  let hrow = '<tr><th>Name</th>';
+  dayMeta.forEach(d => {
+    hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
+  });
+  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  thead.innerHTML = hrow;
+
+  const tbody = document.getElementById('rpTimeBody');
+  let bodyHtml = '';
+  const colTotals = new Array(dayIndices.length).fill(0);
+
+  rpPeople.forEach(p => {
+    let monthTotal = 0; let workDays = 0;
+    let row = '<tr><td>' + p.name + '</td>';
+    dayIndices.forEach((di, ci) => {
+      const c = p.daily[di];
+      const t = fmtTime(c);
+      row += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+      colTotals[ci] += c;
+      monthTotal += c; if (c > 0) workDays++;
+    });
+    const totalT = fmtTime(monthTotal);
+    row += '<td class="time-total">' + totalT.text + '</td>';
+    const avgC = workDays > 0 ? Math.round(monthTotal / workDays) : 0;
+    row += '<td class="time-avg">' + fmtTime(avgC).text + '</td></tr>';
+    bodyHtml += row;
+  });
+  tbody.innerHTML = bodyHtml;
+
+  const tfoot = document.getElementById('rpTimeFoot');
+  let frow = '<tr><td>Team Total</td>';
+  dayIndices.forEach((_, ci) => {
+    const t = fmtTime(colTotals[ci]);
+    frow += '<td class="time-cell ' + t.cls + '">' + t.text + '</td>';
+  });
+  const gt = colTotals.reduce((a, b) => a + b, 0);
+  const wd = colTotals.filter(c => c > 0).length || 1;
+  frow += '<td class="time-total">' + fmtTime(gt).text + '</td>';
+  frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
+  frow += '</tr>';
+  tfoot.innerHTML = frow;
+}
+buildRpTimeTable();
+_allTimeTableRebuilds.push(buildRpTimeTable);
+
+// === RP Daily Leaderboard (today) ===
+function buildRpDailyLB() {
+  const tbody = document.querySelector('#rpDailyLB tbody');
+  if (!tbody || rpDaily.length === 0) return;
+  const indices = getDailyIndicesInRange(rpDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = rpPeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
+  todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }
+
+  let html = '';
+  todayData.forEach((p, i) => {
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+buildRpDailyLB();
+_allLeaderboardRebuilds.push(buildRpDailyLB);
+
+// === RP Monthly Leaderboard (current month) ===
+function buildRpMonthlyLB() {
+  const tbody = document.querySelector('#rpMonthlyLB tbody');
+  if (!tbody || rpDaily.length === 0) return;
+  const indices = getDailyIndicesInRange(rpDaily);
+
+  const monthData = rpPeople.map(p => {
+    let sum = 0;
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
+    return { name: p.name, count: sum };
+  });
+  monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  function fmtHrs(c) {
+    if (c === 0) return '--';
+    const h = c / 8; return h >= 1 ? Math.floor(h) + 'h' + (Math.round((h%1)*60)>0 ? ' '+Math.round((h%1)*60)+'m' : '') : Math.round(h*60)+'m';
+  }
+
+  let html = '';
+  monthData.forEach((p, i) => {
+    const cls = p.count === 0 ? ' style="opacity:0.45"' : '';
+    html += '<tr' + cls + '><td><span class="rank ' + (i===0?'gold':i===1?'silver':i===2?'bronze':'default') + '">' + (i+1) + '</span></td>';
+    html += '<td>' + p.name + '</td>';
+    html += '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + p.count + '</td>';
+    html += '<td style="text-align:right;color:var(--amber);font-variant-numeric:tabular-nums">' + fmtHrs(p.count) + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+buildRpMonthlyLB();
+_allLeaderboardRebuilds.push(buildRpMonthlyLB);
 
 // ============================================================
 // === Evasion Cases Tab — ML Evasion (Snowflake data) ===
 // ============================================================
-const mlDaily = [{"date": "Jan 01", "count": 0, "dow": "Thu", "key": "2026-01-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 02", "count": 113, "dow": "Fri", "key": "2026-01-02", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 84, "P2": 14, "P3": 0}, {"date": "Jan 03", "count": 7, "dow": "Sat", "key": "2026-01-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Jan 04", "count": 0, "dow": "Sun", "key": "2026-01-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 05", "count": 84, "dow": "Mon", "key": "2026-01-05", "MCA P1": 0, "MCA P2": 0, "NMI": 13, "P1": 71, "P2": 0, "P3": 0}, {"date": "Jan 06", "count": 98, "dow": "Tue", "key": "2026-01-06", "MCA P1": 0, "MCA P2": 1, "NMI": 0, "P1": 86, "P2": 11, "P3": 0}, {"date": "Jan 07", "count": 81, "dow": "Wed", "key": "2026-01-07", "MCA P1": 3, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 08", "count": 100, "dow": "Thu", "key": "2026-01-08", "MCA P1": 5, "MCA P2": 1, "NMI": 0, "P1": 59, "P2": 35, "P3": 0}, {"date": "Jan 09", "count": 71, "dow": "Fri", "key": "2026-01-09", "MCA P1": 7, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 4, "P3": 0}, {"date": "Jan 10", "count": 3, "dow": "Sat", "key": "2026-01-10", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 3, "P3": 0}, {"date": "Jan 11", "count": 0, "dow": "Sun", "key": "2026-01-11", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 12", "count": 98, "dow": "Mon", "key": "2026-01-12", "MCA P1": 0, "MCA P2": 1, "NMI": 4, "P1": 93, "P2": 0, "P3": 0}, {"date": "Jan 13", "count": 43, "dow": "Tue", "key": "2026-01-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 41, "P2": 0, "P3": 0}, {"date": "Jan 14", "count": 95, "dow": "Wed", "key": "2026-01-14", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 94, "P2": 0, "P3": 0}, {"date": "Jan 15", "count": 78, "dow": "Thu", "key": "2026-01-15", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 16", "count": 44, "dow": "Fri", "key": "2026-01-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 36, "P2": 8, "P3": 0}, {"date": "Jan 17", "count": 6, "dow": "Sat", "key": "2026-01-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 6, "P3": 0}, {"date": "Jan 18", "count": 0, "dow": "Sun", "key": "2026-01-18", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 19", "count": 6, "dow": "Mon", "key": "2026-01-19", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 6, "P2": 0, "P3": 0}, {"date": "Jan 20", "count": 82, "dow": "Tue", "key": "2026-01-20", "MCA P1": 1, "MCA P2": 1, "NMI": 0, "P1": 69, "P2": 11, "P3": 0}, {"date": "Jan 21", "count": 80, "dow": "Wed", "key": "2026-01-21", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 68, "P2": 2, "P3": 0}, {"date": "Jan 22", "count": 58, "dow": "Thu", "key": "2026-01-22", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 43, "P2": 14, "P3": 0}, {"date": "Jan 23", "count": 71, "dow": "Fri", "key": "2026-01-23", "MCA P1": 9, "MCA P2": 1, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Jan 24", "count": 5, "dow": "Sat", "key": "2026-01-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 5, "P2": 0, "P3": 0}, {"date": "Jan 25", "count": 0, "dow": "Sun", "key": "2026-01-25", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 26", "count": 124, "dow": "Mon", "key": "2026-01-26", "MCA P1": 0, "MCA P2": 0, "NMI": 20, "P1": 104, "P2": 0, "P3": 0}, {"date": "Jan 27", "count": 127, "dow": "Tue", "key": "2026-01-27", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 111, "P2": 15, "P3": 0}, {"date": "Jan 28", "count": 78, "dow": "Wed", "key": "2026-01-28", "MCA P1": 0, "MCA P2": 0, "NMI": 8, "P1": 22, "P2": 48, "P3": 0}, {"date": "Jan 29", "count": 42, "dow": "Thu", "key": "2026-01-29", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 41, "P2": 1, "P3": 0}, {"date": "Jan 30", "count": 86, "dow": "Fri", "key": "2026-01-30", "MCA P1": 15, "MCA P2": 0, "NMI": 0, "P1": 70, "P2": 1, "P3": 0}, {"date": "Jan 31", "count": 9, "dow": "Sat", "key": "2026-01-31", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 9, "P2": 0, "P3": 0}, {"date": "Feb 01", "count": 0, "dow": "Sun", "key": "2026-02-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 02", "count": 100, "dow": "Mon", "key": "2026-02-02", "MCA P1": 0, "MCA P2": 0, "NMI": 11, "P1": 87, "P2": 2, "P3": 0}, {"date": "Feb 03", "count": 53, "dow": "Tue", "key": "2026-02-03", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 49, "P2": 2, "P3": 0}, {"date": "Feb 04", "count": 55, "dow": "Wed", "key": "2026-02-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 47, "P2": 8, "P3": 0}, {"date": "Feb 05", "count": 61, "dow": "Thu", "key": "2026-02-05", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Feb 06", "count": 65, "dow": "Fri", "key": "2026-02-06", "MCA P1": 8, "MCA P2": 0, "NMI": 0, "P1": 56, "P2": 1, "P3": 0}, {"date": "Feb 07", "count": 0, "dow": "Sat", "key": "2026-02-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 08", "count": 0, "dow": "Sun", "key": "2026-02-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 09", "count": 89, "dow": "Mon", "key": "2026-02-09", "MCA P1": 4, "MCA P2": 1, "NMI": 4, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 10", "count": 107, "dow": "Tue", "key": "2026-02-10", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 90, "P2": 16, "P3": 0}, {"date": "Feb 11", "count": 87, "dow": "Wed", "key": "2026-02-11", "MCA P1": 0, "MCA P2": 0, "NMI": 5, "P1": 65, "P2": 17, "P3": 0}, {"date": "Feb 12", "count": 75, "dow": "Thu", "key": "2026-02-12", "MCA P1": 3, "MCA P2": 0, "NMI": 0, "P1": 40, "P2": 32, "P3": 0}, {"date": "Feb 13", "count": 74, "dow": "Fri", "key": "2026-02-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 57, "P2": 15, "P3": 0}, {"date": "Feb 14", "count": 0, "dow": "Sat", "key": "2026-02-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 15", "count": 0, "dow": "Sun", "key": "2026-02-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 16", "count": 8, "dow": "Mon", "key": "2026-02-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 1, "P3": 0}, {"date": "Feb 17", "count": 79, "dow": "Tue", "key": "2026-02-17", "MCA P1": 12, "MCA P2": 2, "NMI": 1, "P1": 61, "P2": 3, "P3": 0}, {"date": "Feb 18", "count": 84, "dow": "Wed", "key": "2026-02-18", "MCA P1": 10, "MCA P2": 0, "NMI": 6, "P1": 67, "P2": 1, "P3": 0}, {"date": "Feb 19", "count": 125, "dow": "Thu", "key": "2026-02-19", "MCA P1": 13, "MCA P2": 0, "NMI": 0, "P1": 81, "P2": 31, "P3": 0}, {"date": "Feb 20", "count": 111, "dow": "Fri", "key": "2026-02-20", "MCA P1": 0, "MCA P2": 0, "NMI": 14, "P1": 75, "P2": 22, "P3": 0}, {"date": "Feb 21", "count": 7, "dow": "Sat", "key": "2026-02-21", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Feb 22", "count": 0, "dow": "Sun", "key": "2026-02-22", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 23", "count": 70, "dow": "Mon", "key": "2026-02-23", "MCA P1": 0, "MCA P2": 0, "NMI": 4, "P1": 63, "P2": 3, "P3": 0}, {"date": "Feb 24", "count": 80, "dow": "Tue", "key": "2026-02-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 25", "count": 104, "dow": "Wed", "key": "2026-02-25", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 76, "P2": 27, "P3": 0}, {"date": "Feb 26", "count": 92, "dow": "Thu", "key": "2026-02-26", "MCA P1": 3, "MCA P2": 0, "NMI": 8, "P1": 60, "P2": 21, "P3": 0}, {"date": "Feb 27", "count": 72, "dow": "Fri", "key": "2026-02-27", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 38, "P2": 34, "P3": 0}, {"date": "Feb 28", "count": 4, "dow": "Sat", "key": "2026-02-28", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 3, "P3": 0}, {"date": "Mar 01", "count": 1, "dow": "Sun", "key": "2026-03-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 0, "P3": 0}, {"date": "Mar 02", "count": 87, "dow": "Mon", "key": "2026-03-02", "MCA P1": 0, "MCA P2": 0, "NMI": 6, "P1": 81, "P2": 0, "P3": 0}, {"date": "Mar 03", "count": 74, "dow": "Tue", "key": "2026-03-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 64, "P2": 10, "P3": 0}, {"date": "Mar 04", "count": 105, "dow": "Wed", "key": "2026-03-04", "MCA P1": 4, "MCA P2": 0, "NMI": 1, "P1": 94, "P2": 6, "P3": 0}, {"date": "Mar 05", "count": 120, "dow": "Thu", "key": "2026-03-05", "MCA P1": 4, "MCA P2": 1, "NMI": 8, "P1": 65, "P2": 42, "P3": 0}, {"date": "Mar 06", "count": 61, "dow": "Fri", "key": "2026-03-06", "MCA P1": 1, "MCA P2": 0, "NMI": 1, "P1": 14, "P2": 45, "P3": 0}, {"date": "Mar 07", "count": 0, "dow": "Sat", "key": "2026-03-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 08", "count": 0, "dow": "Sun", "key": "2026-03-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 09", "count": 64, "dow": "Mon", "key": "2026-03-09", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 60, "P2": 2, "P3": 0}, {"date": "Mar 10", "count": 73, "dow": "Tue", "key": "2026-03-10", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 68, "P2": 3, "P3": 1}, {"date": "Mar 11", "count": 20, "dow": "Wed", "key": "2026-03-11", "MCA P1": 9, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 11, "P3": 0}, {"date": "Mar 12", "count": 40, "dow": "Thu", "key": "2026-03-12", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 39, "P2": 0, "P3": 0}, {"date": "Mar 13", "count": 22, "dow": "Fri", "key": "2026-03-13", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 2, "P2": 10, "P3": 0}, {"date": "Mar 14", "count": 0, "dow": "Sat", "key": "2026-03-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 15", "count": 0, "dow": "Sun", "key": "2026-03-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 16", "count": 78, "dow": "Mon", "key": "2026-03-16", "MCA P1": 7, "MCA P2": 2, "NMI": 1, "P1": 59, "P2": 9, "P3": 0}, {"date": "Mar 17", "count": 69, "dow": "Tue", "key": "2026-03-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 66, "P2": 3, "P3": 0}, {"date": "Mar 18", "count": 45, "dow": "Wed", "key": "2026-03-18", "MCA P1": 0, "MCA P2": 0, "NMI": 3, "P1": 36, "P2": 6, "P3": 0}, {"date": "Mar 19", "count": 58, "dow": "Thu", "key": "2026-03-19", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 46, "P2": 11, "P3": 0}, {"date": "Mar 20", "count": 62, "dow": "Fri", "key": "2026-03-20", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 2, "P3": 0}, {"date": "Mar 21", "count": 0, "dow": "Sat", "key": "2026-03-21", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 22", "count": 0, "dow": "Sun", "key": "2026-03-22", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 23", "count": 97, "dow": "Mon", "key": "2026-03-23", "MCA P1": 0, "MCA P2": 0, "NMI": 12, "P1": 81, "P2": 4, "P3": 0}, {"date": "Mar 24", "count": 47, "dow": "Tue", "key": "2026-03-24", "MCA P1": 4, "MCA P2": 1, "NMI": 2, "P1": 35, "P2": 5, "P3": 0}, {"date": "Mar 25", "count": 91, "dow": "Wed", "key": "2026-03-25", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 81, "P2": 10, "P3": 0}, {"date": "Mar 26", "count": 37, "dow": "Thu", "key": "2026-03-26", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 33, "P2": 4, "P3": 0}, {"date": "Mar 27", "count": 11, "dow": "Fri", "key": "2026-03-27", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 11, "P2": 0, "P3": 0}, {"date": "Mar 28", "count": 0, "dow": "Sat", "key": "2026-03-28", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 29", "count": 0, "dow": "Sun", "key": "2026-03-29", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 30", "count": 98, "dow": "Mon", "key": "2026-03-30", "MCA P1": 0, "MCA P2": 0, "NMI": 6, "P1": 91, "P2": 1, "P3": 0}, {"date": "Mar 31", "count": 74, "dow": "Tue", "key": "2026-03-31", "MCA P1": 0, "MCA P2": 0, "NMI": 4, "P1": 70, "P2": 0, "P3": 0}, {"date": "Apr 01", "count": 7, "dow": "Wed", "key": "2026-04-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}];
-const mlWeekly = [{"week": "Dec 29", "count": 120, "key": "2025-12-29", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 91, "P2": 14, "P3": 0}, {"week": "Jan 05", "count": 437, "key": "2026-01-05", "MCA P1": 15, "MCA P2": 2, "NMI": 14, "P1": 349, "P2": 57, "P3": 0}, {"week": "Jan 12", "count": 364, "key": "2026-01-12", "MCA P1": 1, "MCA P2": 1, "NMI": 7, "P1": 337, "P2": 18, "P3": 0}, {"week": "Jan 19", "count": 302, "key": "2026-01-19", "MCA P1": 10, "MCA P2": 2, "NMI": 11, "P1": 251, "P2": 28, "P3": 0}, {"week": "Jan 26", "count": 466, "key": "2026-01-26", "MCA P1": 15, "MCA P2": 0, "NMI": 29, "P1": 357, "P2": 65, "P3": 0}, {"week": "Feb 02", "count": 334, "key": "2026-02-02", "MCA P1": 8, "MCA P2": 0, "NMI": 13, "P1": 299, "P2": 14, "P3": 0}, {"week": "Feb 09", "count": 432, "key": "2026-02-09", "MCA P1": 7, "MCA P2": 1, "NMI": 12, "P1": 325, "P2": 87, "P3": 0}, {"week": "Feb 16", "count": 414, "key": "2026-02-16", "MCA P1": 35, "MCA P2": 2, "NMI": 21, "P1": 298, "P2": 58, "P3": 0}, {"week": "Feb 23", "count": 423, "key": "2026-02-23", "MCA P1": 3, "MCA P2": 0, "NMI": 13, "P1": 312, "P2": 95, "P3": 0}, {"week": "Mar 02", "count": 447, "key": "2026-03-02", "MCA P1": 9, "MCA P2": 1, "NMI": 16, "P1": 318, "P2": 103, "P3": 0}, {"week": "Mar 09", "count": 219, "key": "2026-03-09", "MCA P1": 11, "MCA P2": 0, "NMI": 12, "P1": 169, "P2": 26, "P3": 1}, {"week": "Mar 16", "count": 312, "key": "2026-03-16", "MCA P1": 7, "MCA P2": 2, "NMI": 5, "P1": 267, "P2": 31, "P3": 0}, {"week": "Mar 23", "count": 283, "key": "2026-03-23", "MCA P1": 4, "MCA P2": 1, "NMI": 14, "P1": 241, "P2": 23, "P3": 0}, {"week": "Mar 30", "count": 179, "key": "2026-03-30", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 168, "P2": 1, "P3": 0}];
-const mlMonthly = [{"month": "Jan '26", "key": "2026-01", "total": 1689, "MCA P1": 53, "MCA P2": 8, "NMI": 61, "P1": 1385, "P2": 182, "P3": 0}, {"month": "Feb '26", "key": "2026-02", "total": 1602, "MCA P1": 53, "MCA P2": 3, "NMI": 59, "P1": 1233, "P2": 254, "P3": 0}, {"month": "Mar '26", "key": "2026-03", "total": 1434, "MCA P1": 31, "MCA P2": 4, "NMI": 57, "P1": 1157, "P2": 184, "P3": 1}, {"month": "Apr '26", "key": "2026-04", "total": 7, "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}];
+const mlDaily = [{"date": "Jan 01", "count": 0, "dow": "Thu", "key": "2026-01-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 02", "count": 113, "dow": "Fri", "key": "2026-01-02", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 84, "P2": 14, "P3": 0}, {"date": "Jan 03", "count": 7, "dow": "Sat", "key": "2026-01-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Jan 04", "count": 0, "dow": "Sun", "key": "2026-01-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 05", "count": 84, "dow": "Mon", "key": "2026-01-05", "MCA P1": 0, "MCA P2": 0, "NMI": 13, "P1": 71, "P2": 0, "P3": 0}, {"date": "Jan 06", "count": 98, "dow": "Tue", "key": "2026-01-06", "MCA P1": 0, "MCA P2": 1, "NMI": 0, "P1": 86, "P2": 11, "P3": 0}, {"date": "Jan 07", "count": 81, "dow": "Wed", "key": "2026-01-07", "MCA P1": 3, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 08", "count": 100, "dow": "Thu", "key": "2026-01-08", "MCA P1": 5, "MCA P2": 1, "NMI": 0, "P1": 59, "P2": 35, "P3": 0}, {"date": "Jan 09", "count": 71, "dow": "Fri", "key": "2026-01-09", "MCA P1": 7, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 4, "P3": 0}, {"date": "Jan 10", "count": 3, "dow": "Sat", "key": "2026-01-10", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 3, "P3": 0}, {"date": "Jan 11", "count": 0, "dow": "Sun", "key": "2026-01-11", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 12", "count": 98, "dow": "Mon", "key": "2026-01-12", "MCA P1": 0, "MCA P2": 1, "NMI": 4, "P1": 93, "P2": 0, "P3": 0}, {"date": "Jan 13", "count": 43, "dow": "Tue", "key": "2026-01-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 41, "P2": 0, "P3": 0}, {"date": "Jan 14", "count": 95, "dow": "Wed", "key": "2026-01-14", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 94, "P2": 0, "P3": 0}, {"date": "Jan 15", "count": 78, "dow": "Thu", "key": "2026-01-15", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 73, "P2": 4, "P3": 0}, {"date": "Jan 16", "count": 44, "dow": "Fri", "key": "2026-01-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 36, "P2": 8, "P3": 0}, {"date": "Jan 17", "count": 6, "dow": "Sat", "key": "2026-01-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 6, "P3": 0}, {"date": "Jan 18", "count": 0, "dow": "Sun", "key": "2026-01-18", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 19", "count": 6, "dow": "Mon", "key": "2026-01-19", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 6, "P2": 0, "P3": 0}, {"date": "Jan 20", "count": 82, "dow": "Tue", "key": "2026-01-20", "MCA P1": 1, "MCA P2": 1, "NMI": 0, "P1": 69, "P2": 11, "P3": 0}, {"date": "Jan 21", "count": 80, "dow": "Wed", "key": "2026-01-21", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 68, "P2": 2, "P3": 0}, {"date": "Jan 22", "count": 58, "dow": "Thu", "key": "2026-01-22", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 43, "P2": 14, "P3": 0}, {"date": "Jan 23", "count": 71, "dow": "Fri", "key": "2026-01-23", "MCA P1": 9, "MCA P2": 1, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Jan 24", "count": 5, "dow": "Sat", "key": "2026-01-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 5, "P2": 0, "P3": 0}, {"date": "Jan 25", "count": 0, "dow": "Sun", "key": "2026-01-25", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Jan 26", "count": 124, "dow": "Mon", "key": "2026-01-26", "MCA P1": 0, "MCA P2": 0, "NMI": 20, "P1": 104, "P2": 0, "P3": 0}, {"date": "Jan 27", "count": 127, "dow": "Tue", "key": "2026-01-27", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 111, "P2": 15, "P3": 0}, {"date": "Jan 28", "count": 78, "dow": "Wed", "key": "2026-01-28", "MCA P1": 0, "MCA P2": 0, "NMI": 8, "P1": 22, "P2": 48, "P3": 0}, {"date": "Jan 29", "count": 42, "dow": "Thu", "key": "2026-01-29", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 41, "P2": 1, "P3": 0}, {"date": "Jan 30", "count": 86, "dow": "Fri", "key": "2026-01-30", "MCA P1": 15, "MCA P2": 0, "NMI": 0, "P1": 70, "P2": 1, "P3": 0}, {"date": "Jan 31", "count": 9, "dow": "Sat", "key": "2026-01-31", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 9, "P2": 0, "P3": 0}, {"date": "Feb 01", "count": 0, "dow": "Sun", "key": "2026-02-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 02", "count": 100, "dow": "Mon", "key": "2026-02-02", "MCA P1": 0, "MCA P2": 0, "NMI": 11, "P1": 87, "P2": 2, "P3": 0}, {"date": "Feb 03", "count": 53, "dow": "Tue", "key": "2026-02-03", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 49, "P2": 2, "P3": 0}, {"date": "Feb 04", "count": 55, "dow": "Wed", "key": "2026-02-04", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 47, "P2": 8, "P3": 0}, {"date": "Feb 05", "count": 61, "dow": "Thu", "key": "2026-02-05", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 1, "P3": 0}, {"date": "Feb 06", "count": 65, "dow": "Fri", "key": "2026-02-06", "MCA P1": 8, "MCA P2": 0, "NMI": 0, "P1": 56, "P2": 1, "P3": 0}, {"date": "Feb 07", "count": 0, "dow": "Sat", "key": "2026-02-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 08", "count": 0, "dow": "Sun", "key": "2026-02-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 09", "count": 89, "dow": "Mon", "key": "2026-02-09", "MCA P1": 4, "MCA P2": 1, "NMI": 4, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 10", "count": 107, "dow": "Tue", "key": "2026-02-10", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 90, "P2": 16, "P3": 0}, {"date": "Feb 11", "count": 87, "dow": "Wed", "key": "2026-02-11", "MCA P1": 0, "MCA P2": 0, "NMI": 5, "P1": 65, "P2": 17, "P3": 0}, {"date": "Feb 12", "count": 75, "dow": "Thu", "key": "2026-02-12", "MCA P1": 3, "MCA P2": 0, "NMI": 0, "P1": 40, "P2": 32, "P3": 0}, {"date": "Feb 13", "count": 74, "dow": "Fri", "key": "2026-02-13", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 57, "P2": 15, "P3": 0}, {"date": "Feb 14", "count": 0, "dow": "Sat", "key": "2026-02-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 15", "count": 0, "dow": "Sun", "key": "2026-02-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 16", "count": 8, "dow": "Mon", "key": "2026-02-16", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 1, "P3": 0}, {"date": "Feb 17", "count": 79, "dow": "Tue", "key": "2026-02-17", "MCA P1": 12, "MCA P2": 2, "NMI": 1, "P1": 61, "P2": 3, "P3": 0}, {"date": "Feb 18", "count": 84, "dow": "Wed", "key": "2026-02-18", "MCA P1": 10, "MCA P2": 0, "NMI": 6, "P1": 67, "P2": 1, "P3": 0}, {"date": "Feb 19", "count": 125, "dow": "Thu", "key": "2026-02-19", "MCA P1": 13, "MCA P2": 0, "NMI": 0, "P1": 81, "P2": 31, "P3": 0}, {"date": "Feb 20", "count": 111, "dow": "Fri", "key": "2026-02-20", "MCA P1": 0, "MCA P2": 0, "NMI": 14, "P1": 75, "P2": 22, "P3": 0}, {"date": "Feb 21", "count": 7, "dow": "Sat", "key": "2026-02-21", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 7, "P2": 0, "P3": 0}, {"date": "Feb 22", "count": 0, "dow": "Sun", "key": "2026-02-22", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Feb 23", "count": 70, "dow": "Mon", "key": "2026-02-23", "MCA P1": 0, "MCA P2": 0, "NMI": 4, "P1": 63, "P2": 3, "P3": 0}, {"date": "Feb 24", "count": 80, "dow": "Tue", "key": "2026-02-24", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 73, "P2": 7, "P3": 0}, {"date": "Feb 25", "count": 104, "dow": "Wed", "key": "2026-02-25", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 76, "P2": 27, "P3": 0}, {"date": "Feb 26", "count": 92, "dow": "Thu", "key": "2026-02-26", "MCA P1": 3, "MCA P2": 0, "NMI": 8, "P1": 60, "P2": 21, "P3": 0}, {"date": "Feb 27", "count": 72, "dow": "Fri", "key": "2026-02-27", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 38, "P2": 34, "P3": 0}, {"date": "Feb 28", "count": 4, "dow": "Sat", "key": "2026-02-28", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 3, "P3": 0}, {"date": "Mar 01", "count": 1, "dow": "Sun", "key": "2026-03-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 1, "P2": 0, "P3": 0}, {"date": "Mar 02", "count": 87, "dow": "Mon", "key": "2026-03-02", "MCA P1": 0, "MCA P2": 0, "NMI": 6, "P1": 81, "P2": 0, "P3": 0}, {"date": "Mar 03", "count": 74, "dow": "Tue", "key": "2026-03-03", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 64, "P2": 10, "P3": 0}, {"date": "Mar 04", "count": 105, "dow": "Wed", "key": "2026-03-04", "MCA P1": 4, "MCA P2": 0, "NMI": 1, "P1": 94, "P2": 6, "P3": 0}, {"date": "Mar 05", "count": 120, "dow": "Thu", "key": "2026-03-05", "MCA P1": 4, "MCA P2": 1, "NMI": 8, "P1": 65, "P2": 42, "P3": 0}, {"date": "Mar 06", "count": 61, "dow": "Fri", "key": "2026-03-06", "MCA P1": 1, "MCA P2": 0, "NMI": 1, "P1": 14, "P2": 45, "P3": 0}, {"date": "Mar 07", "count": 0, "dow": "Sat", "key": "2026-03-07", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 08", "count": 0, "dow": "Sun", "key": "2026-03-08", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 09", "count": 64, "dow": "Mon", "key": "2026-03-09", "MCA P1": 0, "MCA P2": 0, "NMI": 2, "P1": 60, "P2": 2, "P3": 0}, {"date": "Mar 10", "count": 73, "dow": "Tue", "key": "2026-03-10", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 68, "P2": 3, "P3": 1}, {"date": "Mar 11", "count": 20, "dow": "Wed", "key": "2026-03-11", "MCA P1": 9, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 11, "P3": 0}, {"date": "Mar 12", "count": 40, "dow": "Thu", "key": "2026-03-12", "MCA P1": 1, "MCA P2": 0, "NMI": 0, "P1": 39, "P2": 0, "P3": 0}, {"date": "Mar 13", "count": 22, "dow": "Fri", "key": "2026-03-13", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 2, "P2": 10, "P3": 0}, {"date": "Mar 14", "count": 0, "dow": "Sat", "key": "2026-03-14", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 15", "count": 0, "dow": "Sun", "key": "2026-03-15", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 16", "count": 78, "dow": "Mon", "key": "2026-03-16", "MCA P1": 7, "MCA P2": 2, "NMI": 1, "P1": 59, "P2": 9, "P3": 0}, {"date": "Mar 17", "count": 69, "dow": "Tue", "key": "2026-03-17", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 66, "P2": 3, "P3": 0}, {"date": "Mar 18", "count": 45, "dow": "Wed", "key": "2026-03-18", "MCA P1": 0, "MCA P2": 0, "NMI": 3, "P1": 36, "P2": 6, "P3": 0}, {"date": "Mar 19", "count": 58, "dow": "Thu", "key": "2026-03-19", "MCA P1": 0, "MCA P2": 0, "NMI": 1, "P1": 46, "P2": 11, "P3": 0}, {"date": "Mar 20", "count": 62, "dow": "Fri", "key": "2026-03-20", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 60, "P2": 2, "P3": 0}, {"date": "Mar 21", "count": 0, "dow": "Sat", "key": "2026-03-21", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 22", "count": 0, "dow": "Sun", "key": "2026-03-22", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 23", "count": 97, "dow": "Mon", "key": "2026-03-23", "MCA P1": 0, "MCA P2": 0, "NMI": 12, "P1": 81, "P2": 4, "P3": 0}, {"date": "Mar 24", "count": 47, "dow": "Tue", "key": "2026-03-24", "MCA P1": 4, "MCA P2": 1, "NMI": 2, "P1": 35, "P2": 5, "P3": 0}, {"date": "Mar 25", "count": 91, "dow": "Wed", "key": "2026-03-25", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 81, "P2": 10, "P3": 0}, {"date": "Mar 26", "count": 37, "dow": "Thu", "key": "2026-03-26", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 33, "P2": 4, "P3": 0}, {"date": "Mar 27", "count": 11, "dow": "Fri", "key": "2026-03-27", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 11, "P2": 0, "P3": 0}, {"date": "Mar 28", "count": 0, "dow": "Sat", "key": "2026-03-28", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 29", "count": 0, "dow": "Sun", "key": "2026-03-29", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 0, "P2": 0, "P3": 0}, {"date": "Mar 30", "count": 98, "dow": "Mon", "key": "2026-03-30", "MCA P1": 0, "MCA P2": 0, "NMI": 6, "P1": 91, "P2": 1, "P3": 0}, {"date": "Mar 31", "count": 74, "dow": "Tue", "key": "2026-03-31", "MCA P1": 0, "MCA P2": 0, "NMI": 4, "P1": 70, "P2": 0, "P3": 0}, {"date": "Apr 01", "count": 103, "dow": "Wed", "key": "2026-04-01", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 102, "P2": 1, "P3": 0}, {"date": "Apr 02", "count": 12, "dow": "Thu", "key": "2026-04-02", "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 11, "P2": 1, "P3": 0}];
+const mlWeekly = [{"week": "Dec 29", "count": 120, "key": "2025-12-29", "MCA P1": 12, "MCA P2": 3, "NMI": 0, "P1": 91, "P2": 14, "P3": 0}, {"week": "Jan 05", "count": 437, "key": "2026-01-05", "MCA P1": 15, "MCA P2": 2, "NMI": 14, "P1": 349, "P2": 57, "P3": 0}, {"week": "Jan 12", "count": 364, "key": "2026-01-12", "MCA P1": 1, "MCA P2": 1, "NMI": 7, "P1": 337, "P2": 18, "P3": 0}, {"week": "Jan 19", "count": 302, "key": "2026-01-19", "MCA P1": 10, "MCA P2": 2, "NMI": 11, "P1": 251, "P2": 28, "P3": 0}, {"week": "Jan 26", "count": 466, "key": "2026-01-26", "MCA P1": 15, "MCA P2": 0, "NMI": 29, "P1": 357, "P2": 65, "P3": 0}, {"week": "Feb 02", "count": 334, "key": "2026-02-02", "MCA P1": 8, "MCA P2": 0, "NMI": 13, "P1": 299, "P2": 14, "P3": 0}, {"week": "Feb 09", "count": 432, "key": "2026-02-09", "MCA P1": 7, "MCA P2": 1, "NMI": 12, "P1": 325, "P2": 87, "P3": 0}, {"week": "Feb 16", "count": 414, "key": "2026-02-16", "MCA P1": 35, "MCA P2": 2, "NMI": 21, "P1": 298, "P2": 58, "P3": 0}, {"week": "Feb 23", "count": 423, "key": "2026-02-23", "MCA P1": 3, "MCA P2": 0, "NMI": 13, "P1": 312, "P2": 95, "P3": 0}, {"week": "Mar 02", "count": 447, "key": "2026-03-02", "MCA P1": 9, "MCA P2": 1, "NMI": 16, "P1": 318, "P2": 103, "P3": 0}, {"week": "Mar 09", "count": 219, "key": "2026-03-09", "MCA P1": 11, "MCA P2": 0, "NMI": 12, "P1": 169, "P2": 26, "P3": 1}, {"week": "Mar 16", "count": 312, "key": "2026-03-16", "MCA P1": 7, "MCA P2": 2, "NMI": 5, "P1": 267, "P2": 31, "P3": 0}, {"week": "Mar 23", "count": 283, "key": "2026-03-23", "MCA P1": 4, "MCA P2": 1, "NMI": 14, "P1": 241, "P2": 23, "P3": 0}, {"week": "Mar 30", "count": 287, "key": "2026-03-30", "MCA P1": 0, "MCA P2": 0, "NMI": 10, "P1": 274, "P2": 3, "P3": 0}];
+const mlMonthly = [{"month": "Jan '26", "key": "2026-01", "total": 1689, "MCA P1": 53, "MCA P2": 8, "NMI": 61, "P1": 1385, "P2": 182, "P3": 0}, {"month": "Feb '26", "key": "2026-02", "total": 1602, "MCA P1": 53, "MCA P2": 3, "NMI": 59, "P1": 1233, "P2": 254, "P3": 0}, {"month": "Mar '26", "key": "2026-03", "total": 1434, "MCA P1": 31, "MCA P2": 4, "NMI": 57, "P1": 1157, "P2": 184, "P3": 1}, {"month": "Apr '26", "key": "2026-04", "total": 115, "MCA P1": 0, "MCA P2": 0, "NMI": 0, "P1": 113, "P2": 2, "P3": 0}];
 const mlQueues = ["MCA P1", "MCA P2", "NMI", "P1", "P2", "P3"];
-const mlPeople = [{"name": "Marivelle Solanzo", "total": 3139, "daily": [0, 66, 7, 0, 60, 68, 60, 64, 63, 3, 0, 76, 38, 75, 60, 41, 6, 0, 0, 58, 66, 50, 58, 5, 0, 40, 55, 39, 36, 63, 9, 0, 70, 40, 45, 52, 50, 0, 0, 62, 66, 63, 51, 61, 0, 0, 0, 40, 47, 75, 74, 7, 0, 48, 57, 69, 59, 53, 4, 0, 61, 60, 71, 63, 45, 0, 0, 57, 58, 0, 39, 0, 0, 0, 35, 42, 24, 42, 48, 0, 0, 45, 26, 44, 0, 0, 0, 0, 72, 48, 0], "weekly": [73, 318, 296, 237, 242, 257, 303, 243, 290, 300, 154, 191, 115, 120]}, {"name": "Julia Ye", "total": 224, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6, 17, 9, 0, 0, 0, 0, 3, 21, 8, 0, 0, 5, 7, 6, 0, 2, 0, 0, 0, 0, 5, 7, 0, 0, 0, 0, 3, 10, 0, 9, 0, 0, 0, 20, 6, 15, 4, 0, 0, 17, 2, 12, 18, 10, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 34, 32, 20, 12, 22, 45, 59, 0]}, {"name": "Evelyn Ruiz", "total": 210, "daily": [0, 0, 0, 0, 1, 0, 8, 9, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 8, 1, 0, 0, 0, 10, 12, 11, 10, 0, 0, 14, 0, 16, 13, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 14, 15, 0, 0, 0, 15, 15, 0], "weekly": [0, 18, 10, 0, 0, 0, 4, 9, 43, 55, 0, 12, 29, 30]}, {"name": "Nicholas Padilla", "total": 171, "daily": [0, 0, 0, 0, 13, 0, 1, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 20, 0, 1, 0, 0, 0, 0, 11, 1, 0, 0, 0, 0, 0, 4, 10, 0, 0, 2, 0, 0, 0, 4, 10, 0, 14, 0, 0, 4, 0, 0, 8, 0, 0, 0, 5, 0, 0, 8, 0, 0, 0, 2, 0, 0, 0, 10, 0, 0, 0, 0, 3, 0, 0, 0, 0, 12, 2, 0, 0, 0, 0, 0, 6, 4, 0], "weekly": [0, 14, 6, 10, 21, 12, 16, 28, 12, 13, 12, 3, 14, 10]}, {"name": "Angela Bautista", "total": 20, "daily": [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 3, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0]}];
+const mlPeople = [{"name": "Marivelle Solanzo", "total": 3218, "daily": [0, 66, 7, 0, 60, 68, 60, 64, 63, 3, 0, 76, 38, 75, 60, 41, 6, 0, 0, 58, 66, 50, 58, 5, 0, 40, 55, 39, 36, 63, 9, 0, 70, 40, 45, 52, 50, 0, 0, 62, 66, 63, 51, 61, 0, 0, 0, 40, 47, 75, 74, 7, 0, 48, 57, 69, 59, 53, 4, 0, 61, 60, 71, 63, 45, 0, 0, 57, 58, 0, 39, 0, 0, 0, 35, 42, 24, 42, 48, 0, 0, 45, 26, 44, 0, 0, 0, 0, 72, 48, 79, 0], "weekly": [73, 318, 296, 237, 242, 257, 303, 243, 290, 300, 154, 191, 115, 199]}, {"name": "Evelyn Ruiz", "total": 226, "daily": [0, 0, 0, 0, 1, 0, 8, 9, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 8, 1, 0, 0, 0, 10, 12, 11, 10, 0, 0, 14, 0, 16, 13, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 14, 15, 0, 0, 0, 15, 15, 16, 0], "weekly": [0, 18, 10, 0, 0, 0, 4, 9, 43, 55, 0, 12, 29, 46]}, {"name": "Julia Ye", "total": 224, "daily": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6, 17, 9, 0, 0, 0, 0, 3, 21, 8, 0, 0, 5, 7, 6, 0, 2, 0, 0, 0, 0, 5, 7, 0, 0, 0, 0, 3, 10, 0, 9, 0, 0, 0, 20, 6, 15, 4, 0, 0, 17, 2, 12, 18, 10, 0, 0, 0, 0, 0, 0], "weekly": [0, 0, 0, 0, 0, 0, 34, 32, 20, 12, 22, 45, 59, 0]}, {"name": "Nicholas Padilla", "total": 171, "daily": [0, 0, 0, 0, 13, 0, 1, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 20, 0, 1, 0, 0, 0, 0, 11, 1, 0, 0, 0, 0, 0, 4, 10, 0, 0, 2, 0, 0, 0, 4, 10, 0, 14, 0, 0, 4, 0, 0, 8, 0, 0, 0, 5, 0, 0, 8, 0, 0, 0, 2, 0, 0, 0, 10, 0, 0, 0, 0, 3, 0, 0, 0, 0, 12, 2, 0, 0, 0, 0, 0, 6, 4, 0, 0], "weekly": [0, 14, 6, 10, 21, 12, 16, 28, 12, 13, 12, 3, 14, 10]}, {"name": "Angela Bautista", "total": 20, "daily": [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "weekly": [0, 3, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0]}];
 
 const ML_QUEUE_COLORS = { P1: '#3b82f6', P2: '#f59e0b', P3: '#ef4444', NMI: '#8b5cf6', 'MCA P1': '#06b6d4', 'MCA P2': '#ec4899' };
 
@@ -3320,6 +4492,7 @@ const _drawMlWeekly = mlChartEngine('mlWeeklyChart', mlWeekly, 'weekly',
 
 window.drawMlDailyChart = _drawMlDaily || (() => {});
 window.drawMlWeeklyChart = _drawMlWeekly || (() => {});
+_allChartRedraws.push(window.drawMlDailyChart, window.drawMlWeeklyChart);
 
 const _allMlRedraw = [window.drawMlDailyChart, window.drawMlWeeklyChart];
 function rebuildMlLegends() {
@@ -3497,6 +4670,7 @@ const _drawEvWeekly = evChartEngine('evWeeklyChart', evWeekly, 'weekly',
 
 window.drawEvDailyChart = _drawEvDaily || (() => {});
 window.drawEvWeeklyChart = _drawEvWeekly || (() => {});
+_allChartRedraws.push(window.drawEvDailyChart, window.drawEvWeeklyChart);
 
 const _allEvRedraw = [window.drawEvDailyChart, window.drawEvWeeklyChart];
 function rebuildEvLegends() {
@@ -3587,8 +4761,8 @@ window.addEventListener('resize', () => {
   drawEvBreakdown();
 })();
 
-// === Combined Evasion Time Spent Table (ML per-person + Manual per-person, current month daily) ===
-(function() {
+// === Combined Evasion Time Spent Table ===
+function buildEvTimeTable() {
   const CASES_PER_HOUR = 8;
   if (evDaily.length === 0 && mlDaily.length === 0) return;
 
@@ -3606,22 +4780,18 @@ window.addEventListener('resize', () => {
     return { text: text.trim(), cls };
   }
 
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-
-  // Use evDaily (or mlDaily) as date skeleton
   const refDaily = evDaily.length > 0 ? evDaily : mlDaily;
+  const refIndices = getDailyIndicesInRange(refDaily);
   const dayIndices = [];
   const dayMeta = [];
-  refDaily.forEach((d, idx) => {
-    if (!d.key.startsWith(curPrefix)) return;
+  refIndices.forEach(idx => {
+    const d = refDaily[idx];
     if (d.dow === 'Sat' || d.dow === 'Sun') return;
     dayIndices.push(idx);
     dayMeta.push(d);
   });
   if (dayIndices.length === 0) return;
 
-  // Build ML daily lookup by date key for per-person
   const mlDayKeyToIdx = {};
   mlDaily.forEach((d, idx) => { mlDayKeyToIdx[d.key] = idx; });
 
@@ -3630,14 +4800,13 @@ window.addEventListener('resize', () => {
   dayMeta.forEach(d => {
     hrow += '<th>' + d.date.split(' ')[1] + '<br>' + d.dow + '</th>';
   });
-  hrow += '<th>Month Total</th><th>Daily Avg</th></tr>';
+  hrow += '<th>Total</th><th>Daily Avg</th></tr>';
   thead.innerHTML = hrow;
 
   const tbody = document.getElementById('evTimeBody');
   let bodyHtml = '';
   const colTotals = new Array(dayIndices.length).fill(0);
 
-  // ML per-person rows
   bodyHtml += '<tr><td colspan="' + (dayIndices.length + 3) + '" style="background:#1e2030;color:#3b82f6;font-weight:600;font-size:12px;padding:6px 10px">ML Evasion Cases</td></tr>';
   mlPeople.forEach(p => {
     if (p.total === 0) return;
@@ -3659,7 +4828,6 @@ window.addEventListener('resize', () => {
     bodyHtml += row;
   });
 
-  // Cap-Evasion per-person rows
   bodyHtml += '<tr><td colspan="' + (dayIndices.length + 3) + '" style="background:#1e2030;color:#22c55e;font-weight:600;font-size:12px;padding:6px 10px">Cap-Evasion Manual Reviews</td></tr>';
   evPeople.forEach(p => {
     let monthTotal = 0; let workDays = 0;
@@ -3680,7 +4848,6 @@ window.addEventListener('resize', () => {
 
   tbody.innerHTML = bodyHtml;
 
-  // Footer: combined totals per day
   const tfoot = document.getElementById('evTimeFoot');
   let frow = '<tr><td><strong>Combined Total</strong></td>';
   dayIndices.forEach((_, ci) => {
@@ -3693,14 +4860,18 @@ window.addEventListener('resize', () => {
   frow += '<td class="time-avg">' + fmtTime(Math.round(gt / wd)).text + '</td>';
   frow += '</tr>';
   tfoot.innerHTML = frow;
-})();
+}
+buildEvTimeTable();
+_allTimeTableRebuilds.push(buildEvTimeTable);
 
 // === ML Daily Leaderboard (today) ===
-(function() {
+function buildMlDailyLB() {
   const tbody = document.querySelector('#mlDailyLB tbody');
   if (!tbody || mlDaily.length === 0 || mlPeople.length === 0) return;
-  const todayIdx = mlDaily.length - 1;
-  const todayData = mlPeople.map(p => ({ name: p.name, count: p.daily[todayIdx] || 0 }));
+  const indices = getDailyIndicesInRange(mlDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = mlPeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
   todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   function fmtHrs(c) {
@@ -3718,20 +4889,19 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildMlDailyLB();
+_allLeaderboardRebuilds.push(buildMlDailyLB);
 
 // === ML Monthly Leaderboard (current month) ===
-(function() {
+function buildMlMonthlyLB() {
   const tbody = document.querySelector('#mlMonthlyLB tbody');
   if (!tbody || mlDaily.length === 0 || mlPeople.length === 0) return;
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const monthIndices = [];
-  mlDaily.forEach((d, idx) => { if (d.key.startsWith(curPrefix)) monthIndices.push(idx); });
+  const indices = getDailyIndicesInRange(mlDaily);
 
   const monthData = mlPeople.map(p => {
     let sum = 0;
-    monthIndices.forEach(idx => { sum += p.daily[idx] || 0; });
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
     return { name: p.name, count: sum };
   });
   monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
@@ -3751,14 +4921,18 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildMlMonthlyLB();
+_allLeaderboardRebuilds.push(buildMlMonthlyLB);
 
 // === Evasion Daily Leaderboard (today) ===
-(function() {
+function buildEvDailyLB() {
   const tbody = document.querySelector('#evDailyLB tbody');
   if (!tbody || evDaily.length === 0) return;
-  const todayIdx = evDaily.length - 1;
-  const todayData = evPeople.map(p => ({ name: p.name, count: p.daily[todayIdx] || 0 }));
+  const indices = getDailyIndicesInRange(evDaily);
+  if (indices.length === 0) { tbody.innerHTML = ''; return; }
+  const lastIdx = indices[indices.length - 1];
+  const todayData = evPeople.map(p => ({ name: p.name, count: p.daily[lastIdx] || 0 }));
   todayData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   function fmtHrs(c) {
@@ -3776,20 +4950,19 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
-})();
+}
+buildEvDailyLB();
+_allLeaderboardRebuilds.push(buildEvDailyLB);
 
 // === Evasion Monthly Leaderboard (current month) ===
-(function() {
+function buildEvMonthlyLB() {
   const tbody = document.querySelector('#evMonthlyLB tbody');
   if (!tbody || evDaily.length === 0) return;
-  const now = new Date();
-  const curPrefix = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-  const monthIndices = [];
-  evDaily.forEach((d, idx) => { if (d.key.startsWith(curPrefix)) monthIndices.push(idx); });
+  const indices = getDailyIndicesInRange(evDaily);
 
   const monthData = evPeople.map(p => {
     let sum = 0;
-    monthIndices.forEach(idx => { sum += p.daily[idx] || 0; });
+    indices.forEach(idx => { sum += p.daily[idx] || 0; });
     return { name: p.name, count: sum };
   });
   monthData.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
@@ -3809,7 +4982,91 @@ window.addEventListener('resize', () => {
     html += '</tr>';
   });
   tbody.innerHTML = html;
+}
+buildEvMonthlyLB();
+_allLeaderboardRebuilds.push(buildEvMonthlyLB);
+
+// === Meeting Time Tab — Horizontal bar chart (one bar per person) ===
+const mtPeople = [];
+
+const _drawMtWeekly = (function() {
+  const canvas = document.getElementById('mtWeeklyChart');
+  if (!canvas || mtPeople.length === 0) return null;
+  return function() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const n = mtPeople.length;
+    const barH = 32;
+    const gap = 8;
+    const W = rect.width;
+    const pad = { top: 28, bottom: 16, left: 180, right: 60 };
+    const H = pad.top + n * (barH + gap) + pad.bottom;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const cw = W - pad.left - pad.right;
+    const maxH = Math.max(1, Math.max(...mtPeople.map(p => p.totalHours)));
+
+    // Grid lines
+    const gridSteps = 5;
+    ctx.strokeStyle = '#2a2d3a'; ctx.lineWidth = 0.5;
+    for (let g = 0; g <= gridSteps; g++) {
+      const gx = pad.left + (cw * g / gridSteps);
+      ctx.beginPath(); ctx.moveTo(gx, pad.top - 10); ctx.lineTo(gx, H - pad.bottom); ctx.stroke();
+      ctx.fillStyle = '#71717a'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText((maxH * g / gridSteps).toFixed(1) + 'h', gx, pad.top - 14);
+    }
+
+    // Bars
+    mtPeople.forEach((p, i) => {
+      const y = pad.top + i * (barH + gap);
+      const bw = cw * p.totalHours / maxH;
+      const color = PERSON_COLORS[i % PERSON_COLORS.length];
+
+      // Bar
+      const grad = ctx.createLinearGradient(pad.left, y, pad.left + bw, y);
+      grad.addColorStop(0, color); grad.addColorStop(1, color + 'aa');
+      ctx.fillStyle = grad;
+      // Draw rounded bar (with fallback for older browsers)
+      if (ctx.roundRect) {
+        ctx.beginPath(); ctx.roundRect(pad.left, y, Math.max(bw, 2), barH, [0, 6, 6, 0]); ctx.fill();
+      } else {
+        ctx.fillRect(pad.left, y, Math.max(bw, 2), barH);
+      }
+
+      // Name label (left)
+      ctx.fillStyle = '#e4e4e7'; ctx.font = '12px -apple-system, sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(p.name, pad.left - 10, y + barH / 2 + 4);
+
+      // Value label (right of bar)
+      ctx.fillStyle = '#e4e4e7'; ctx.font = 'bold 12px -apple-system, sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(p.totalHours + 'h  (' + p.totalMeetings + ')', pad.left + bw + 8, y + barH / 2 + 4);
+    });
+
+    // Tooltip
+    canvas.onmousemove = function(e) {
+      const r2 = canvas.getBoundingClientRect();
+      const my = e.clientY - r2.top;
+      const idx = Math.floor((my - pad.top) / (barH + gap));
+      if (idx < 0 || idx >= n) { canvas.title = ''; return; }
+      const p = mtPeople[idx];
+      canvas.title = p.name + ': ' + p.totalHours + 'h (' + p.totalMeetings + ' meetings)';
+    };
+  };
 })();
+
+window.drawMtWeeklyChart = _drawMtWeekly || (() => {});
+_allChartRedraws.push(window.drawMtWeeklyChart);
+
+window.addEventListener('resize', () => {
+  const mtTab = document.getElementById('tab-meetings');
+  if (mtTab && mtTab.classList.contains('active')) {
+    window.drawMtWeeklyChart();
+  }
+});
 
 // Apply timeline zoom & pan to all chart canvases
 const _zoomTargets = [
@@ -3826,7 +5083,13 @@ const _zoomTargets = [
   ['evWeeklyChart', () => window.drawEvWeeklyChart && window.drawEvWeeklyChart()],
   ['evBreakdownChart', () => window.drawEvBreakdown && window.drawEvBreakdown()],
   ['meDailyChart', () => window.drawMeDailyChart && window.drawMeDailyChart()],
-  ['meWeeklyChart', () => window.drawMeWeeklyChart && window.drawMeWeeklyChart()]
+  ['meWeeklyChart', () => window.drawMeWeeklyChart && window.drawMeWeeklyChart()],
+  ['oeDailyChart', () => window.drawOeDailyChart && window.drawOeDailyChart()],
+  ['oeWeeklyChart', () => window.drawOeWeeklyChart && window.drawOeWeeklyChart()],
+  ['rpDailyChart', () => window.drawRpDailyChart && window.drawRpDailyChart()],
+  ['rpWeeklyChart', () => window.drawRpWeeklyChart && window.drawRpWeeklyChart()],
+  ['ppFinancialChart', () => window.drawPpFinancialChart && window.drawPpFinancialChart()],
+  ['mtWeeklyChart', () => window.drawMtWeeklyChart && window.drawMtWeeklyChart()]
 ];
 _zoomTargets.forEach(function(pair) {
   const c = document.getElementById(pair[0]);
